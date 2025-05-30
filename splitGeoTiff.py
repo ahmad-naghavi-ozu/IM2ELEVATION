@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-import os, gdal
+import os
 import re
 import sys
 import glob
-from  gdalconst import *
 import math
+from osgeo import gdal
+from osgeo.gdalconst import *
 
 class GeoTiffSplitter:
   def __init__( self, directoryName, xTileSize, yTileSize, doDryRun, xlimit=-1, ylimit=-1):
