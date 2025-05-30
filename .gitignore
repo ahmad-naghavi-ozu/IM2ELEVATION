@@ -11,6 +11,9 @@ documents/
 # PDF processor tool (utility folder)
 tools/pdf_processor/
 
+# Personal Git identity setup script (contains personal info)
+tools/git_setup/setup_git_identity.sh
+
 # ================================
 # PYTHON & CONDA ENVIRONMENTS
 # ================================
