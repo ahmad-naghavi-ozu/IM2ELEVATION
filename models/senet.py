@@ -1,5 +1,3 @@
-from harmonic import Harm2d
-
 """
 ResNet code gently borrowed from
 https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py

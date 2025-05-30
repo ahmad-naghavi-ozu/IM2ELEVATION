@@ -1,0 +1,47 @@
+name: im2elevation
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  # Core Python
+  - python=3.11
+  
+  # PyTorch ecosystem with CUDA 12.x support
+  - pytorch=2.4.*
+  - torchvision=0.19.*
+  - pytorch-cuda=12.1
+  
+  # Core scientific computing
+  - numpy>=1.24
+  - scipy>=1.10
+  - pandas>=2.0
+  - matplotlib>=3.7
+  - pillow>=9.0
+  - opencv>=4.8
+  
+  # Image processing
+  - scikit-image>=0.21
+  - imageio>=2.31
+  
+  # Machine learning
+  - scikit-learn>=1.3
+  
+  # Geospatial
+  - gdal>=3.4
+  - rasterio>=1.3
+  
+  # Development tools
+  - jupyter>=1.0
+  - ipython>=8.0
+  
+  # Build tools
+  - pip
+  - setuptools
+  - wheel
+  
+  # Pip packages (not available in conda)
+  - pip:
+    - pytorch-ssim
+    - tensorboard-logger

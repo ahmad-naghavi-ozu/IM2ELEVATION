@@ -2,7 +2,7 @@
 import torch
 import math
 import numpy as np
-from ssim import pytorch_ssim
+import pytorch_ssim
 from PIL import Image
 import cv2
 import torch
