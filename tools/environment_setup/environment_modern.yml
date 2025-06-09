@@ -44,4 +44,4 @@ dependencies:
   # Pip packages (not available in conda)
   - pip:
     - pytorch-ssim
-    - tensorboard-logger
+    - tensorboard
