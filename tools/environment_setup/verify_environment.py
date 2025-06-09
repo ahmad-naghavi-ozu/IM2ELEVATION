@@ -98,7 +98,17 @@ def main():
     optional_results.append(test_import('osgeo.gdal', 'GDAL', required=False))
     optional_results.append(test_import('rasterio', 'Rasterio', required=False))
     optional_results.append(test_import('pytorch_ssim', 'PyTorch-SSIM', required=False))
-    optional_results.append(test_import('tensorboard_logger', 'TensorBoard Logger', required=False))
+    # Test TensorBoard (modern approach)
+    try:
+        from torch.utils.tensorboard import SummaryWriter
+        print("✅ TensorBoard (PyTorch): Successfully imported")
+        optional_results.append(True)
+    except ImportError as e:
+        print(f"❌ TensorBoard (PyTorch): Import failed - {e}")
+        optional_results.append(False)
+    
+    # Legacy tensorboard_logger check (for reference)
+    optional_results.append(test_import('tensorboard_logger', 'TensorBoard Logger (Legacy)', required=False))
     
     # Development tools
     print(f"\n📦 Development Tools:")

@@ -12,7 +12,7 @@ import sobel
 from models import modules, net, resnet, densenet, senet
 import cv2
 import os
-from tensorboard_logger import configure, log_value
+from torch.utils.tensorboard import SummaryWriter
 
 
 
@@ -85,14 +85,14 @@ def main():
     print(args.data)
     if not os.path.exists(logfolder):
        os.makedirs(logfolder)
-    configure(logfolder)
+    writer = SummaryWriter(logfolder)
  
 
     for epoch in range(args.start_epoch, args.epochs):
 
         adjust_learning_rate(optimizer, epoch)
 
-        train(train_loader, model, optimizer, epoch)
+        train(train_loader, model, optimizer, epoch, writer)
 
         out_name = save_model+str(epoch)+'.pth.tar'
         #if epoch > 30:
@@ -101,7 +101,7 @@ def main():
         
 
 
-def train(train_loader, model, optimizer, epoch):
+def train(train_loader, model, optimizer, epoch, writer):
     criterion = nn.L1Loss()
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -119,15 +119,15 @@ def train(train_loader, model, optimizer, epoch):
 
         image, depth = sample_batched['image'], sample_batched['depth']
 
-        depth = depth.cuda(async=True)
+        depth = depth.cuda(non_blocking=True)
         image = image.cuda()
 
-
-        image = torch.autograd.Variable(image)
-        depth = torch.autograd.Variable(depth)
+        # Note: torch.autograd.Variable is deprecated, tensors have autograd by default
+        image.requires_grad_(True)
+        depth.requires_grad_(True)
 
         ones = torch.ones(depth.size(0), 1, depth.size(2),depth.size(3)).float().cuda()
-        ones = torch.autograd.Variable(ones)
+        ones.requires_grad_(True)
         optimizer.zero_grad()
 
         output = model(image)
@@ -164,7 +164,7 @@ def train(train_loader, model, optimizer, epoch):
         loss_dy = torch.log(torch.abs(output_grad_dy - depth_grad_dy) + 0.5).mean()
         loss_normal = torch.abs(1 - cos(output_normal, depth_normal)).mean()
         loss = loss_depth + loss_normal + (loss_dx + loss_dy)
-        losses.update(loss.data, image.size(0))
+        losses.update(loss.item(), image.size(0))
         loss.backward()
         optimizer.step()
 
@@ -178,7 +178,7 @@ def train(train_loader, model, optimizer, epoch):
           'Time {batch_time.val:.3f} ({batch_time.sum:.3f})\t'
           'Loss {loss.val:.4f} ({loss.avg:.4f})'
           .format(epoch, i, len(train_loader), batch_time=batch_time, loss=losses))
-    log_value('training loss',losses.avg,epoch)
+    writer.add_scalar('training loss', losses.avg, epoch)
 
 
   
