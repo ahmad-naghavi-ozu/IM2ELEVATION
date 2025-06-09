@@ -11,7 +11,7 @@ import sobel
 import argparse
 import cv2
 from PIL import Image
-from tensorboard_logger import configure, log_value
+from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
 import os
 import csv
@@ -55,7 +55,7 @@ def test(test_loader, model, args):
 
     for i, sample_batched in enumerate(test_loader):
         image, depth = sample_batched['image'], sample_batched['depth']
-        depth = depth.cuda(async=True)
+        depth = depth.cuda(non_blocking=True)
         image = image.cuda()
         output = model(image)
 
@@ -79,7 +79,7 @@ def test(test_loader, model, args):
      
 
     averageError['RMSE'] = np.sqrt(averageError['MSE'])
-    loss = float((losses.avg).data.cpu().numpy())
+    loss = float(losses.avg.cpu().numpy())
 
 
 
@@ -116,7 +116,7 @@ def testing_loss(depth , output, losses, batchSize):
     loss_dy = torch.log(torch.abs(output_grad_dy - depth_grad_dy) + 0.5).mean()
     loss_normal = torch.abs(1 - cos(output_normal, depth_normal)).mean()
     loss = loss_depth + loss_normal + (loss_dx + loss_dy)
-    losses.update(loss.data, batchSize)
+    losses.update(loss.item(), batchSize)
 
 
 
