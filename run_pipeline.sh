@@ -231,11 +231,23 @@ if [[ "$SKIP_TRAINING" == false ]]; then
         echo ""
     } >> "$PIPELINE_LOG"
     
+    # Execute training with clean output
     eval "$TRAIN_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
+    
+    # Check if training actually succeeded by looking for model files
+    DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
+    TRAINED_MODEL_FILES=($(find "$DATASET_OUTPUT_DIR" -name "*.tar" 2>/dev/null | sort))
+    
+    if [[ ${#TRAINED_MODEL_FILES[@]} -eq 0 ]]; then
+        echo "ERROR: Training failed - no model files were generated!"
+        echo "Check the log file for details: $PIPELINE_LOG"
+        exit 1
+    fi
     
     {
         echo ""
         echo "Training completed: $(date)"
+        echo "Generated ${#TRAINED_MODEL_FILES[@]} model checkpoints"
         echo ""
     } >> "$PIPELINE_LOG"
     
@@ -349,7 +361,14 @@ if [[ "$SKIP_TESTING" == false ]]; then
     echo ""
     echo "Test Results Summary:"
     echo "===================="
-    # Show last few results
-    find "$OUTPUT_DIR" -name "test_results_*.txt" -type f -exec tail -n 10 {} \; 2>/dev/null || echo "No test results found"
+    # Show only the most recent test results (not all historical results)
+    LATEST_RESULTS=$(find "$OUTPUT_DIR" -name "test_results_*.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
+    if [[ -n "$LATEST_RESULTS" ]]; then
+        echo "Latest results from: $(basename "$LATEST_RESULTS")"
+        # Show only the actual metrics (last line with Loss, MSE, RMSE, etc.)
+        grep "Model Loss" "$LATEST_RESULTS" | tail -1 2>/dev/null || echo "Results saved to file"
+    else
+        echo "No test results found"
+    fi
 fi
 echo "=============================================="

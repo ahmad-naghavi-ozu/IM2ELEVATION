@@ -6,6 +6,13 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 import loaddata
+import warnings
+import os
+
+# Suppress ALL warnings for clean training output
+warnings.filterwarnings("ignore")
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow warnings
+torch.backends.cudnn.benchmark = True  # Optimize CUDA performance
 
 import numpy as np
 import sobel
@@ -33,7 +40,9 @@ parser.add_argument('--csv', default='')
 parser.add_argument('--model', default='')
 
 args = parser.parse_args()
-save_model = args.data+'/'+args.data+'_model_'
+# Extract dataset name from path for model naming
+dataset_name = os.path.basename(args.data.rstrip('/'))
+save_model = args.data+'/'+dataset_name+'_model_'
 if not os.path.exists(args.data):
     os.makedirs(args.data)
 
@@ -82,22 +91,51 @@ def main():
     train_loader = loaddata.getTrainingData(batch_size,args.csv)
 
     logfolder = "runs/"+args.data 
-    print(args.data)
+    print(f"Training dataset: {os.path.basename(args.data)}")
     if not os.path.exists(logfolder):
        os.makedirs(logfolder)
     writer = SummaryWriter(logfolder)
  
+    # Best checkpoint tracking
+    best_loss = float('inf')
+    best_epoch = 0
+    best_model_path = None
+
+    print(f"Starting training for {args.epochs} epochs...")
+    print("=" * 60)
 
     for epoch in range(args.start_epoch, args.epochs):
 
         adjust_learning_rate(optimizer, epoch)
 
-        train(train_loader, model, optimizer, epoch, writer)
+        # Train and get average loss for this epoch
+        avg_loss = train(train_loader, model, optimizer, epoch, writer)
+        
+        # Only save checkpoint if this is the best model so far
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            best_epoch = epoch
+            
+            # Remove previous best checkpoint to save space
+            if best_model_path and os.path.exists(best_model_path):
+                os.remove(best_model_path)
+                print(f"Removed previous checkpoint: {os.path.basename(best_model_path)}", flush=True)
+            
+            # Save new best checkpoint
+            best_model_path = save_model + f'best_epoch_{epoch}.pth.tar'
+            modelname = save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch, 'loss': avg_loss}, best_model_path)
+            print(f"🏆 NEW BEST! Epoch {epoch}, Loss: {avg_loss:.4f}", flush=True)
+        else:
+            print(f"Epoch {epoch}, Loss: {avg_loss:.4f} (Best: {best_loss:.4f} at epoch {best_epoch})", flush=True)
+            
+        # Also save latest checkpoint (overwrite each time to save space)
+        latest_path = save_model + 'latest.pth.tar'
+        save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch, 'loss': avg_loss}, latest_path)
 
-        out_name = save_model+str(epoch)+'.pth.tar'
-        #if epoch > 30:
-        modelname = save_checkpoint({'state_dict': model.state_dict()},out_name)
-        print(modelname)
+    print("=" * 50, flush=True)
+    print(f"✅ Training completed! Best: Epoch {best_epoch}, Loss: {best_loss:.4f}", flush=True)
+    print(f"📁 Checkpoints: {os.path.basename(best_model_path)}, latest.pth.tar", flush=True)
+    print("=" * 50, flush=True)
         
 
 
@@ -133,7 +171,8 @@ def train(train_loader, model, optimizer, epoch, writer):
         output = model(image)
         
 
-        if i%200 == 0:
+        # Disable debug image saving during training for cleaner output
+        if False:  # Changed from i%200 == 0 to False to disable completely
             x = output[0]
             x = x.view([220,220])
             x = x.cpu().detach().numpy()
@@ -174,11 +213,16 @@ def train(train_loader, model, optimizer, epoch, writer):
         batchSize = depth.size(0)
 
 
-        print('Epoch: [{0}][{1}/{2}]\t'
-          'Time {batch_time.val:.3f} ({batch_time.sum:.3f})\t'
-          'Loss {loss.val:.4f} ({loss.avg:.4f})'
-          .format(epoch, i, len(train_loader), batch_time=batch_time, loss=losses))
+        # Print progress more frequently for small datasets
+        batch_frequency = max(1, len(train_loader) // 4)  # Show 4 updates per epoch minimum
+        if i % batch_frequency == 0 or i == len(train_loader) - 1:  # Always show last batch
+            print('Epoch: [{0}][{1}/{2}] Loss: {loss.avg:.4f}'
+                  .format(epoch, i, len(train_loader), loss=losses), flush=True)
+    
     writer.add_scalar('training loss', losses.avg, epoch)
+    
+    # Return average loss for this epoch
+    return losses.avg
 
 
   

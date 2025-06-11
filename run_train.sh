@@ -158,32 +158,13 @@ echo "Starting training..."
 echo "Command: $TRAIN_CMD"
 echo ""
 
-# Log training details
-LOG_FILE="${DATASET_OUTPUT_DIR}/training_log_${DATASET_NAME}_$(date +%Y%m%d_%H%M%S).txt"
-echo "Training log will be saved to: $LOG_FILE"
-echo ""
-
-# Run training with logging
-{
-    echo "Training started: $(date)"
-    echo "Command: $TRAIN_CMD"
-    echo "Configuration:"
-    echo "  Dataset: $DATASET_NAME"
-    echo "  CSV: $CSV_PATH" 
-    echo "  Epochs: $EPOCHS"
-    echo "  Learning Rate: $LEARNING_RATE"
-    echo "  Output Dir: $DATASET_OUTPUT_DIR"
-    echo "  Resume Epoch: $RESUME_EPOCH"
-    echo "======================================"
-    echo ""
-} > "$LOG_FILE"
-
-# Execute training command
-eval "$TRAIN_CMD" 2>&1 | tee -a "$LOG_FILE"
+# Execute training command with clean output
+eval "$TRAIN_CMD"
 
 echo ""
 echo "======================================"
 echo "Training completed!"
+echo "======================================"
 echo "Models saved in: $DATASET_OUTPUT_DIR"
-echo "Training log: $LOG_FILE"
+echo "Check for 'best_epoch_*.pth.tar' and 'latest.pth.tar' files"
 echo "======================================"

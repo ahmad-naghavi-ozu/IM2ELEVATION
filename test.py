@@ -16,6 +16,16 @@ import pandas as pd
 import os
 import csv
 import re
+import warnings
+
+# Suppress ALL warnings for clean output
+warnings.filterwarnings("ignore")
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Reduce CUDA verbosity
+
+import sys
+from contextlib import redirect_stdout, redirect_stderr
+from io import StringIO
 def main():
     model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
 
@@ -28,17 +38,36 @@ def main():
     args = parser.parse_args()
 
     md = glob.glob(args.model+'/*.tar')
+    
+    # Prioritize best checkpoint if available
+    best_checkpoints = [x for x in md if 'best_epoch_' in x]
+    if best_checkpoints:
+        print(f"Found {len(best_checkpoints)} best checkpoint(s), testing best model only...")
+        # Sort by epoch number and take the latest best
+        best_checkpoints.sort(key=lambda x: int(x.split('best_epoch_')[1].split('.')[0]))
+        md = [best_checkpoints[-1]]  # Use only the latest best checkpoint
+    else:
+        print(f"No best checkpoints found, testing all {len(md)} checkpoints...")
+        md.sort(key=natural_keys)
 
-    md.sort(key=natural_keys)
+    print(f"Testing {len(md)} checkpoint(s)...")
+    print("=" * 60)
   
 
     for x in md:
         x = str(x)
-
-        model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
-        model = torch.nn.DataParallel(model,device_ids=[0,1]).cuda()
-        state_dict = torch.load(x)['state_dict']
-        model.load_state_dict(state_dict)
+        
+        # Create model with suppressed output
+        f = StringIO()
+        with redirect_stdout(f), redirect_stderr(f):
+            model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
+            model = torch.nn.DataParallel(model,device_ids=[0,1]).cuda()
+            state_dict = torch.load(x, map_location='cuda')['state_dict']
+            
+            # Load state dict quietly without printing parameter names
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model.load_state_dict(state_dict, strict=False)
 
         test_loader = loaddata.getTestingData(2,args.csv)
         test(test_loader, model, args)
@@ -79,7 +108,7 @@ def test(test_loader, model, args):
      
 
     averageError['RMSE'] = np.sqrt(averageError['MSE'])
-    loss = float(losses.avg.cpu().numpy())
+    loss = float(losses.avg)
 
 
 
