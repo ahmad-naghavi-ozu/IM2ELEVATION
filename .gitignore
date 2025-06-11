@@ -15,6 +15,19 @@ tools/pdf_processor/
 tools/git_setup/setup_git_identity.sh
 
 # ================================
+# WORK PROGRESS FOLDERS 
+# ================================
+
+# Pipeline output and experiment results
+pipeline_output/
+
+# Pre-trained model weights and checkpoints
+pretrained_model/
+
+# TensorBoard logs and training runs
+runs/
+
+# ================================
 # PYTHON & CONDA ENVIRONMENTS
 # ================================
 
