@@ -288,6 +288,19 @@ cache/
 .nv/
 
 # ================================
+# WORK PROGRESS & RUNTIME DATA
+# ================================
+
+# Pipeline output directory (training logs, test results, temporary outputs)
+pipeline_output/
+
+# Pre-trained model weights and checkpoints (large binary files)
+pretrained_model/
+
+# TensorBoard runs and training logs
+runs/
+
+# ================================
 # DOCUMENTATION BUILD
 # ================================
 
