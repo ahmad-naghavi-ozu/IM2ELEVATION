@@ -39,42 +39,53 @@ def main():
 
     md = glob.glob(args.model+'/*.tar')
     
-    # Prioritize best checkpoint if available
+    if not md:
+        print("No checkpoint files found!")
+        return
+    
+    # Prioritize best checkpoint for evaluation
     best_checkpoints = [x for x in md if 'best_epoch_' in x]
+    
     if best_checkpoints:
-        print(f"Found {len(best_checkpoints)} best checkpoint(s), testing best model only...")
         # Sort by epoch number and take the latest best
         best_checkpoints.sort(key=lambda x: int(x.split('best_epoch_')[1].split('.')[0]))
-        md = [best_checkpoints[-1]]  # Use only the latest best checkpoint
+        selected_checkpoint = best_checkpoints[-1]
+        print(f"Found best checkpoint, evaluating: {os.path.basename(selected_checkpoint)}")
     else:
-        print(f"No best checkpoints found, testing all {len(md)} checkpoints...")
-        md.sort(key=natural_keys)
-
-    print(f"Testing {len(md)} checkpoint(s)...")
+        # Fallback to latest if no best checkpoint found
+        latest_checkpoints = [x for x in md if 'latest' in x]
+        if latest_checkpoints:
+            selected_checkpoint = latest_checkpoints[0]
+            print(f"No best checkpoint found, using latest: {os.path.basename(selected_checkpoint)}")
+        else:
+            # Use any available checkpoint
+            selected_checkpoint = sorted(md, key=natural_keys)[-1]
+            print(f"Using available checkpoint: {os.path.basename(selected_checkpoint)}")
+    
     print("=" * 60)
-  
-
-    for x in md:
-        x = str(x)
+    
+    checkpoint_name = os.path.basename(selected_checkpoint)
+    
+    # Create model with suppressed output
+    f = StringIO()
+    with redirect_stdout(f), redirect_stderr(f):
+        model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
+        model = torch.nn.DataParallel(model,device_ids=[0,1]).cuda()
+        state_dict = torch.load(selected_checkpoint, map_location='cuda')['state_dict']
         
-        # Create model with suppressed output
-        f = StringIO()
-        with redirect_stdout(f), redirect_stderr(f):
-            model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
-            model = torch.nn.DataParallel(model,device_ids=[0,1]).cuda()
-            state_dict = torch.load(x, map_location='cuda')['state_dict']
-            
-            # Load state dict quietly without printing parameter names
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                model.load_state_dict(state_dict, strict=False)
+        # Load state dict quietly without printing parameter names
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model.load_state_dict(state_dict, strict=False)
 
-        test_loader = loaddata.getTestingData(2,args.csv)
-        test(test_loader, model, args)
+    test_loader = loaddata.getTestingData(2,args.csv)
+    result = test(test_loader, model, args, checkpoint_name)
+    
+    print("=" * 60)
 
 
 
-def test(test_loader, model, args):
+def test(test_loader, model, args, checkpoint_name=""):
     
     losses = AverageMeter()
     model.eval()
@@ -90,16 +101,10 @@ def test(test_loader, model, args):
 
         output = torch.nn.functional.interpolate(output,size=(440,440),mode='bilinear')
 
-
-
-
         batchSize = depth.size(0)
         testing_loss(depth,output,losses,batchSize)
 
-
         totalNumber = totalNumber + batchSize
-
-       
 
         errors = util.evaluateError(output, depth,i,batchSize)
 
@@ -110,15 +115,21 @@ def test(test_loader, model, args):
     averageError['RMSE'] = np.sqrt(averageError['MSE'])
     loss = float(losses.avg)
 
-
-
-    print('Model Loss {loss:.4f}\t'
-        'MSE {mse:.4f}\t'
-        'RMSE {rmse:.4f}\t'
-        'MAE {mae:.4f}\t'
-        'SSIM {ssim:.4f}\t'.format(loss=loss,mse=averageError['MSE']\
-            ,rmse=averageError['RMSE'],mae=averageError['MAE'],\
-            ssim=averageError['SSIM']))
+    # Enhanced output with checkpoint identification
+    checkpoint_info = f" ({checkpoint_name})" if checkpoint_name else ""
+    print(f'Results{checkpoint_info}:')
+    print('  Loss: {loss:.4f} | MSE: {mse:.4f} | RMSE: {rmse:.4f} | MAE: {mae:.4f} | SSIM: {ssim:.4f}'.format(
+        loss=loss, mse=averageError['MSE'], rmse=averageError['RMSE'], 
+        mae=averageError['MAE'], ssim=averageError['SSIM']))
+    
+    return {
+        'checkpoint': checkpoint_name,
+        'loss': loss,
+        'MSE': averageError['MSE'],
+        'RMSE': averageError['RMSE'], 
+        'MAE': averageError['MAE'],
+        'SSIM': averageError['SSIM']
+    }
 
 
 
