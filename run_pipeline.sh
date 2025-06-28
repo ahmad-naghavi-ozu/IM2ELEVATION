@@ -14,6 +14,8 @@ OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
+GPU_IDS="0,1,2"
+SINGLE_GPU=false
 
 # Help function
 show_help() {
@@ -33,6 +35,8 @@ Options:
     --skip-csv                  Skip CSV generation (use existing CSV files)
     --skip-training             Skip training (use existing models for testing)
     --skip-testing              Skip testing (only generate CSV and train)
+    --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
+    --single-gpu                Use single GPU for training/testing
     -h, --help                  Show this help message
 
 Examples:
@@ -85,6 +89,14 @@ while [[ $# -gt 0 ]]; do
             SKIP_TESTING=true
             shift
             ;;
+        --gpu-ids)
+            GPU_IDS="$2"
+            shift 2
+            ;;
+        --single-gpu)
+            SINGLE_GPU=true
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -112,6 +124,13 @@ fi
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
+# Create dataset-specific output directory early for log placement
+DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
+mkdir -p "$DATASET_OUTPUT_DIR"
+
+# Create pipeline log in dataset-specific directory
+PIPELINE_LOG="${DATASET_OUTPUT_DIR}/pipeline_log_${DATASET_NAME}_$(date +%Y%m%d_%H%M%S).txt"
+
 # Print pipeline configuration
 echo "=============================================="
 echo "IM2ELEVATION Full Pipeline Configuration"
@@ -123,6 +142,8 @@ fi
 echo "Output Dir:     $OUTPUT_DIR"
 echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
+echo "GPU IDs:        $GPU_IDS"
+echo "Single GPU:     $SINGLE_GPU"
 echo ""
 echo "Pipeline Steps:"
 echo "  CSV Generation: $([ "$SKIP_CSV_GENERATION" == true ] && echo "SKIP" || echo "RUN")"
@@ -139,8 +160,7 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Create pipeline log
-PIPELINE_LOG="${OUTPUT_DIR}/pipeline_log_${DATASET_NAME}_$(date +%Y%m%d_%H%M%S).txt"
+# Pipeline log was already created above
 {
     echo "IM2ELEVATION Pipeline Log"
     echo "========================"
@@ -154,6 +174,8 @@ PIPELINE_LOG="${OUTPUT_DIR}/pipeline_log_${DATASET_NAME}_$(date +%Y%m%d_%H%M%S).
     echo "  Skip CSV: $SKIP_CSV_GENERATION"
     echo "  Skip Training: $SKIP_TRAINING"
     echo "  Skip Testing: $SKIP_TESTING"
+    echo "  GPU IDs: $GPU_IDS"
+    echo "  Single GPU: $SINGLE_GPU"
     echo ""
 } > "$PIPELINE_LOG"
 
@@ -215,11 +237,17 @@ if [[ "$SKIP_TRAINING" == false ]]; then
         exit 1
     fi
     
-    # Create dataset-specific output directory
-    DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
-    mkdir -p "$DATASET_OUTPUT_DIR"
+    # Dataset-specific output directory was already created earlier
+    # Just reference it here
     
+    # Build training command with GPU options
     TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE"
+    if [[ "$SINGLE_GPU" == true ]]; then
+        TRAIN_CMD="$TRAIN_CMD --single-gpu"
+    else
+        TRAIN_CMD="$TRAIN_CMD --gpu-ids $GPU_IDS"
+    fi
+    
     echo "Command: $TRAIN_CMD"
     echo ""
     
@@ -290,7 +318,14 @@ if [[ "$SKIP_TESTING" == false ]]; then
         exit 1
     fi
     
+    # Build testing command with GPU options
     TEST_CMD="python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV"
+    if [[ "$SINGLE_GPU" == true ]]; then
+        TEST_CMD="$TEST_CMD --single-gpu"
+    else
+        TEST_CMD="$TEST_CMD --gpu-ids $GPU_IDS"
+    fi
+    
     echo "Command: $TEST_CMD"
     echo "Found ${#MODEL_FILES[@]} model checkpoints to test"
     echo ""
