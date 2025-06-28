@@ -39,6 +39,8 @@ def main():
                         help='comma-separated list of GPU IDs to use (default: 0,1,2,3)')
     parser.add_argument('--single-gpu', action='store_true',
                         help='use only single GPU (GPU 0)')
+    parser.add_argument('--batch-size', default=3, type=int,
+                        help='batch size for testing (default: 3)')
     args = parser.parse_args()
     
     # Configure GPU usage
@@ -103,7 +105,7 @@ def main():
             warnings.simplefilter("ignore")
             model.load_state_dict(state_dict, strict=False)
 
-    test_loader = loaddata.getTestingData(2,args.csv)
+    test_loader = loaddata.getTestingData(args.batch_size,args.csv)
     result = test(test_loader, model, args, checkpoint_name)
     
     print("=" * 60)

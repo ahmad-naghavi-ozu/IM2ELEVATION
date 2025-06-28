@@ -38,6 +38,8 @@ parser.add_argument('--gpu-ids', default='0,1,2,3', type=str,
                     help='comma-separated list of GPU IDs to use (default: 0,1,2,3)')
 parser.add_argument('--single-gpu', action='store_true',
                     help='use only single GPU (GPU 0)')
+parser.add_argument('--batch-size', default=2, type=int,
+                    help='batch size per GPU (default: 2)')
 
 parser.add_argument('--data', default='adjust')
 parser.add_argument('--csv', default='')
@@ -99,7 +101,7 @@ def main():
             model = model.cuda()
         state_dict = torch.load(args.model)['state_dict']
         model.load_state_dict(state_dict)
-        batch_size = 2 * len(device_ids)  # Scale batch size by number of GPUs
+        batch_size = args.batch_size * len(device_ids)  # Scale batch size by number of GPUs
     else:
         if len(device_ids) > 1:
             model = torch.nn.DataParallel(model, device_ids=device_ids).cuda()
@@ -107,7 +109,9 @@ def main():
         else:
             model = model.cuda()
             print(f"Model moved to single GPU: {device_ids[0]}")
-        batch_size = 2 * len(device_ids)  # Scale batch size by number of GPUs
+        batch_size = args.batch_size * len(device_ids)  # Scale batch size by number of GPUs
+    
+    print(f"Effective batch size: {batch_size} (base: {args.batch_size} × {len(device_ids)} GPUs)")
 
 
 

@@ -16,6 +16,7 @@ SKIP_TRAINING=false
 SKIP_TESTING=false
 GPU_IDS="0,1,2"
 SINGLE_GPU=false
+BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
 
 # Help function
 show_help() {
@@ -37,6 +38,7 @@ Options:
     --skip-testing              Skip testing (only generate CSV and train)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
     --single-gpu                Use single GPU for training/testing
+    -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 2)
     -h, --help                  Show this help message
 
 Examples:
@@ -97,6 +99,10 @@ while [[ $# -gt 0 ]]; do
             SINGLE_GPU=true
             shift
             ;;
+        -b|--batch-size)
+            BATCH_SIZE="$2"
+            shift 2
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -142,6 +148,7 @@ fi
 echo "Output Dir:     $OUTPUT_DIR"
 echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
+echo "Batch Size:     $BATCH_SIZE"
 echo "GPU IDs:        $GPU_IDS"
 echo "Single GPU:     $SINGLE_GPU"
 echo ""
@@ -171,11 +178,13 @@ fi
     echo "  Output Dir: $OUTPUT_DIR"
     echo "  Epochs: $EPOCHS"
     echo "  Learning Rate: $LEARNING_RATE"
+    echo "  Batch Size: $BATCH_SIZE"
     echo "  Skip CSV: $SKIP_CSV_GENERATION"
     echo "  Skip Training: $SKIP_TRAINING"
     echo "  Skip Testing: $SKIP_TESTING"
     echo "  GPU IDs: $GPU_IDS"
     echo "  Single GPU: $SINGLE_GPU"
+    echo "  Batch Size: $BATCH_SIZE"
     echo ""
 } > "$PIPELINE_LOG"
 
@@ -241,7 +250,7 @@ if [[ "$SKIP_TRAINING" == false ]]; then
     # Just reference it here
     
     # Build training command with GPU options
-    TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE"
+    TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE"
     if [[ "$SINGLE_GPU" == true ]]; then
         TRAIN_CMD="$TRAIN_CMD --single-gpu"
     else
@@ -319,7 +328,7 @@ if [[ "$SKIP_TESTING" == false ]]; then
     fi
     
     # Build testing command with GPU options
-    TEST_CMD="python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV"
+    TEST_CMD="python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE"
     if [[ "$SINGLE_GPU" == true ]]; then
         TEST_CMD="$TEST_CMD --single-gpu"
     else
