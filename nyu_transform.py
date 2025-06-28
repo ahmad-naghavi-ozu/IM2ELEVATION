@@ -1,4 +1,3 @@
-
 import torch
 from numpy import clip
 import numpy as np
@@ -464,3 +463,50 @@ class Normalize(object):
         for t, m, s in zip(tensor, mean, std):
             t.sub_(m).div_(s)
         return tensor
+
+
+class PreprocessInput(object):
+    """
+    Preprocessing transform to handle input images of different sizes before the original IM2ELEVATION pipeline.
+    
+    For images larger than 440x440:
+    - Downscales the image to fit within 440x440 while preserving aspect ratio
+    - Also applies the same scaling to the depth map to maintain spatial consistency
+    
+    For images smaller than 440x440:
+    - Keeps the original size (no upscaling to avoid quality degradation)
+    - WARNING: Images smaller than 440x440 will cause errors in the subsequent CenterCrop step!
+    - Users must ensure input images are at least 440x440 pixels in both dimensions
+    
+    This preprocessing step ensures input compatibility without modifying the original pipeline.
+    """
+    
+    def __init__(self, max_size=440):
+        self.max_size = max_size
+    
+    def __call__(self, sample):
+        image, depth = sample['image'], sample['depth']
+        
+        # Get original dimensions
+        w, h = image.size
+        
+        # Check for minimum size requirement and warn user
+        if w < self.max_size or h < self.max_size:
+            print(f"WARNING: Input image size ({w}x{h}) is smaller than required {self.max_size}x{self.max_size}!")
+            print(f"This will cause errors in the subsequent CenterCrop step.")
+            print(f"Please ensure input images are at least {self.max_size}x{self.max_size} pixels.")
+        
+        # Only resize if image is larger than max_size in either dimension
+        if w > self.max_size or h > self.max_size:
+            # Calculate scaling factor to fit within max_size x max_size while preserving aspect ratio
+            scale_factor = min(self.max_size / w, self.max_size / h)
+            
+            # Calculate new dimensions
+            new_w = int(w * scale_factor)
+            new_h = int(h * scale_factor)
+            
+            # Resize both image and depth with appropriate interpolation
+            image = image.resize((new_w, new_h), Image.BILINEAR)
+            depth = depth.resize((new_w, new_h), Image.NEAREST)
+        
+        return {'image': image, 'depth': depth}
