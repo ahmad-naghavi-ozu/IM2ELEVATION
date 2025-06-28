@@ -55,6 +55,7 @@ def getTrainingData(batch_size=64,csv_data=''):
     csv = csv_data
     transformed_training_trans =  depthDataset(csv_file=csv,
                                         transform=transforms.Compose([
+                                            PreprocessInput(max_size=440),  # New preprocessing step
                                             #RandomHorizontalFlip(),
                                             CenterCrop([440, 440], [220, 220]),
                                             ToTensor(),
@@ -106,6 +107,7 @@ def getTestingData(batch_size=3,csv=''):
 
     transformed_testing = depthDataset(csv_file=csvfile,
                                        transform=transforms.Compose([
+                                           PreprocessInput(max_size=440),  # New preprocessing step
                                            CenterCrop([440, 440],[440,440]),
                                            ToTensor(),
                                            Normalize(__imagenet_stats['mean'],

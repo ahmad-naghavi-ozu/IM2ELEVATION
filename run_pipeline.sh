@@ -6,8 +6,8 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="DFC2023Amini"
-DATASET_PATH=""
+DATASET_NAME="DFC2023S"
+DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2023S"
 EPOCHS=100
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
