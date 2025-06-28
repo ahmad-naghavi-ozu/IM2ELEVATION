@@ -34,6 +34,10 @@ parser.add_argument('--lr', '--learning-rate', default=0.0001, type=float,
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     help='weight decay (default: 1e-4)')
+parser.add_argument('--gpu-ids', default='0,1,2,3', type=str,
+                    help='comma-separated list of GPU IDs to use (default: 0,1,2,3)')
+parser.add_argument('--single-gpu', action='store_true',
+                    help='use only single GPU (GPU 0)')
 
 parser.add_argument('--data', default='adjust')
 parser.add_argument('--csv', default='')
@@ -68,19 +72,42 @@ def main():
     
     global args
     args = parser.parse_args()
+    
+    # Configure GPU usage
+    if args.single_gpu:
+        device_ids = [0]
+        print(f"Using single GPU: {device_ids[0]}")
+    else:
+        device_ids = [int(x.strip()) for x in args.gpu_ids.split(',')]
+        print(f"Using multiple GPUs: {device_ids}")
+    
+    # Check if specified GPUs are available
+    available_gpus = torch.cuda.device_count()
+    print(f"Available GPUs: {available_gpus}")
+    
+    if max(device_ids) >= available_gpus:
+        print(f"Warning: Requested GPU {max(device_ids)} not available. Using available GPUs: {list(range(available_gpus))}")
+        device_ids = list(range(min(len(device_ids), available_gpus)))
+    
     model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
  
     
     if args.start_epoch != 0:
-        model = torch.nn.DataParallel(model, device_ids=[0, 1]).cuda()
-        model = model.cuda()
+        if len(device_ids) > 1:
+            model = torch.nn.DataParallel(model, device_ids=device_ids).cuda()
+        else:
+            model = model.cuda()
         state_dict = torch.load(args.model)['state_dict']
         model.load_state_dict(state_dict)
-        batch_size = 2
+        batch_size = 2 * len(device_ids)  # Scale batch size by number of GPUs
     else:
-        model = model.cuda()
-        #model = torch.nn.DataParallel(model, device_ids=[0, 1]).cuda()
-        batch_size = 2
+        if len(device_ids) > 1:
+            model = torch.nn.DataParallel(model, device_ids=device_ids).cuda()
+            print(f"Model wrapped with DataParallel using GPUs: {device_ids}")
+        else:
+            model = model.cuda()
+            print(f"Model moved to single GPU: {device_ids[0]}")
+        batch_size = 2 * len(device_ids)  # Scale batch size by number of GPUs
 
 
 
