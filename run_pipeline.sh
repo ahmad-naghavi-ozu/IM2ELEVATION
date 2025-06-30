@@ -14,7 +14,7 @@ OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
-GPU_IDS="0,1,2"
+GPU_IDS="0,1"
 SINGLE_GPU=false
 BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
 

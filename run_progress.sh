@@ -3,7 +3,7 @@
 # Simple Training Progress Checker
 # Usage: ./progress.sh [DATASET_NAME] [OUTPUT_DIR]
 
-DATASET_NAME=${1:-"DFC2023Amini"}
+DATASET_NAME=${1:-"DFC2023S"}
 OUTPUT_DIR=${2:-"pipeline_output"}
 DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
 
