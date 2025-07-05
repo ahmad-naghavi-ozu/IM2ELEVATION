@@ -22,7 +22,18 @@ class depthDataset(Dataset):
         
 
 
-        depth = cv2.imread(depth_name,-1); depth = (depth*1000).astype(np.uint16)
+        depth = cv2.imread(depth_name,-1)
+        # Handle different depth image formats
+        if depth.dtype == np.uint8:
+            # For uint8 datasets like DFC2019, convert to float first to avoid overflow
+            depth = depth.astype(np.float32) * 1000
+            depth = depth.astype(np.uint16)
+        elif depth.dtype == np.float32:
+            # For float32 datasets like DFC2023S, multiply and convert directly
+            depth = (depth * 1000).astype(np.uint16)
+        else:
+            # For other formats, attempt direct conversion
+            depth = (depth * 1000).astype(np.uint16)
         #depth  = cv2.cvtColor(depth  , cv2.COLOR_BGR2GRAY)
         depth = Image.fromarray(depth)
         image = Image.open(image_name)

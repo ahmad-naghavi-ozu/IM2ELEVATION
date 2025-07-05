@@ -3,32 +3,18 @@
 # IM2ELEVATION Testing Script
 # Usage: ./test_model.sh [OPTIONS]
 
-set# Auto-detect model directory if not provided
-if [[ -z "$MODEL_DIR" ]]; then
-    MODEL_DIR="${MODEL_BASE_DIR}/${DATASET_NAME}"
-fi
-
-# Validate inputs
-if [[ -z "$DATASET_NAME" ]]; then
-    echo "Error: Dataset name is required"
-    show_help
-    exit 1
-fi
-
-if [[ ! -d "$MODEL_DIR" ]]; then
-    echo "Error: Model directory not found: $MODEL_DIR"
-    echo "Available dataset directories in $MODEL_BASE_DIR:"
-    ls -la "$MODEL_BASE_DIR" 2>/dev/null || echo "Base directory $MODEL_BASE_DIR not found"
-    exit 1
-fi on any error
+set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="DFC2023Amini"
-MODEL_BASE_DIR="models_output"
+DATASET_NAME="DFC2019_crp512_bin"
+MODEL_BASE_DIR="pipeline_output"
 MODEL_DIR=""
 CSV_PATH=""
 OUTPUT_FILE=""
 SAVE_RESULTS=true
+GPU_IDS="1,3"
+SINGLE_GPU=false
+BATCH_SIZE=1
 
 # Help function
 show_help() {
@@ -38,20 +24,23 @@ IM2ELEVATION Testing Script
 Usage: $0 [OPTIONS]
 
 Options:
-    -d, --dataset NAME          Dataset name (default: DFC2023Amini)
-    -b, --base-dir DIR          Base directory containing dataset subdirectories (default: models_output)
+    -d, --dataset NAME          Dataset name (default: DFC2019_crp512_bin)
+    -b, --base-dir DIR          Base directory containing dataset subdirectories (default: pipeline_output)
     -m, --model-dir DIR         Specific model directory (overrides auto-detection)
     -c, --csv PATH              Path to test CSV file (auto-detected if not specified)
     -o, --output FILE           Output file for results (auto-generated if not specified)
+    --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
+    --single-gpu                Use single GPU for testing
+    --batch-size NUM            Batch size for testing (default: 1)
     --no-save                   Don't save results to file (print to terminal only)
     -h, --help                  Show this help message
 
 Examples:
-    # Basic testing (uses models_output/DFC2023Amini/)
-    $0 --dataset DFC2023Amini
+    # Basic testing (uses pipeline_output/DFC2019_crp512_bin/)
+    $0 --dataset DFC2019_crp512_bin
 
     # Test with custom base directory
-    $0 --dataset DFC2023Amini --base-dir my_models
+    $0 --dataset DFC2019_crp512_bin --base-dir my_models
 
     # Test with specific model directory
     $0 --dataset contest --model-dir my_models/contest_experiment1
@@ -81,6 +70,18 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_FILE="$2"
             shift 2
             ;;
+        --gpu-ids)
+            GPU_IDS="$2"
+            shift 2
+            ;;
+        --single-gpu)
+            SINGLE_GPU=true
+            shift
+            ;;
+        --batch-size)
+            BATCH_SIZE="$2"
+            shift 2
+            ;;
         --no-save)
             SAVE_RESULTS=false
             shift
@@ -97,7 +98,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Auto-detect model directory if not provided
+if [[ -z "$MODEL_DIR" ]]; then
+    MODEL_DIR="${MODEL_BASE_DIR}/${DATASET_NAME}"
+fi
+
 # Validate required inputs
+if [[ -z "$DATASET_NAME" ]]; then
+    echo "Error: Dataset name is required"
+    show_help
+    exit 1
+fi
+
 if [[ -z "$MODEL_DIR" ]]; then
     echo "Error: Model directory is required (use --model-dir option)"
     show_help
@@ -124,7 +136,7 @@ fi
 
 # Auto-generate output file if not provided
 if [[ -z "$OUTPUT_FILE" && "$SAVE_RESULTS" == true ]]; then
-    OUTPUT_FILE="test_results_${DATASET_NAME}_$(date +%Y%m%d_%H%M%S).txt"
+    OUTPUT_FILE="${MODEL_DIR}/test_results_${DATASET_NAME}_$(date +%Y%m%d_%H%M%S).txt"
 fi
 
 # Check for model files
@@ -142,6 +154,9 @@ echo "Dataset:        $DATASET_NAME"
 echo "Model Dir:      $MODEL_DIR"
 echo "Test CSV:       $CSV_PATH"
 echo "Model Files:    ${#MODEL_FILES[@]} checkpoints found"
+echo "Batch Size:     $BATCH_SIZE"
+echo "GPU IDs:        $GPU_IDS"
+echo "Single GPU:     $SINGLE_GPU"
 if [[ "$SAVE_RESULTS" == true ]]; then
     echo "Output File:    $OUTPUT_FILE"
 else
@@ -175,7 +190,12 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 # Build testing command
-TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH"
+TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH --batch-size $BATCH_SIZE"
+if [[ "$SINGLE_GPU" == true ]]; then
+    TEST_CMD="$TEST_CMD --single-gpu"
+else
+    TEST_CMD="$TEST_CMD --gpu-ids $GPU_IDS"
+fi
 
 # Start testing
 echo "Starting testing..."
