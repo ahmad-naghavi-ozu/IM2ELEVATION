@@ -170,6 +170,9 @@ data/processed/
 *.csv.gz
 *.parquet
 
+# Dataset CSV files (generated automatically)
+dataset/
+
 # ================================
 # GEOSPATIAL & IMAGERY
 # ================================
