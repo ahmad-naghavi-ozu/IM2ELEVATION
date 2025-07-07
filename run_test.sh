@@ -12,7 +12,7 @@ MODEL_DIR=""
 CSV_PATH=""
 OUTPUT_FILE=""
 SAVE_RESULTS=true
-GPU_IDS="0"
+GPU_IDS="0,1,2,3"
 SINGLE_GPU=false
 BATCH_SIZE=1
 
@@ -24,7 +24,7 @@ IM2ELEVATION Testing Script
 Usage: $0 [OPTIONS]
 
 Options:
-    -d, --dataset NAME          Dataset name (default: DFC2019_crp512_bin)
+    -d, --dataset NAME          Dataset name (default: Dublin)
     -b, --base-dir DIR          Base directory containing dataset subdirectories (default: pipeline_output)
     -m, --model-dir DIR         Specific model directory (overrides auto-detection)
     -c, --csv PATH              Path to test CSV file (auto-detected if not specified)
@@ -36,11 +36,11 @@ Options:
     -h, --help                  Show this help message
 
 Examples:
-    # Basic testing (uses pipeline_output/DFC2019_crp512_bin/)
-    $0 --dataset DFC2019_crp512_bin
+    # Basic testing (uses pipeline_output/Dublin/)
+    $0 --dataset Dublin
 
     # Test with custom base directory
-    $0 --dataset DFC2019_crp512_bin --base-dir my_models
+    $0 --dataset Dublin --base-dir my_models
 
     # Test with specific model directory
     $0 --dataset contest --model-dir my_models/contest_experiment1
@@ -155,8 +155,11 @@ echo "Model Dir:      $MODEL_DIR"
 echo "Test CSV:       $CSV_PATH"
 echo "Model Files:    ${#MODEL_FILES[@]} checkpoints found"
 echo "Batch Size:     $BATCH_SIZE"
-echo "GPU IDs:        $GPU_IDS"
-echo "Single GPU:     $SINGLE_GPU"
+if [[ "$SINGLE_GPU" == true ]]; then
+    echo "GPU Mode:       Single GPU (GPU 0)"
+else
+    echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
+fi
 if [[ "$SAVE_RESULTS" == true ]]; then
     echo "Output File:    $OUTPUT_FILE"
 else

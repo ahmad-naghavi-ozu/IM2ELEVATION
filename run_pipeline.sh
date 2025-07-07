@@ -14,7 +14,7 @@ OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
-GPU_IDS="1,2"
+GPU_IDS="0,1,2,3"
 SINGLE_GPU=false
 BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
@@ -29,9 +29,9 @@ This script runs the complete pipeline: CSV generation → Training → Testing
 Usage: $0 [OPTIONS]
 
 Options:
-    -d, --dataset NAME          Dataset name (default: DFC2023Amini)
+    -d, --dataset NAME          Dataset name (default: Dublin)
     -p, --dataset-path PATH     Path to dataset root directory (required unless --skip-csv)
-    -e, --epochs NUM            Number of epochs to train (default: 100)
+    -e, --epochs NUM            Number of epochs to train (default: 50)
     -lr, --learning-rate RATE   Learning rate (default: 0.0001)
     -o, --output DIR            Output directory for models and results (default: pipeline_output)
     --skip-csv                  Skip CSV generation (use existing CSV files)
@@ -155,8 +155,11 @@ echo "Output Dir:     $OUTPUT_DIR"
 echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
 echo "Batch Size:     $BATCH_SIZE"
-echo "GPU IDs:        $GPU_IDS"
-echo "Single GPU:     $SINGLE_GPU"
+if [[ "$SINGLE_GPU" == true ]]; then
+    echo "GPU Mode:       Single GPU (GPU 0)"
+else
+    echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
+fi
 echo "Auto Resume:    $AUTO_RESUME"
 echo ""
 echo "Pipeline Steps:"
@@ -357,7 +360,7 @@ if [[ "$SKIP_TESTING" == false ]]; then
         exit 1
     fi
     
-    # Build testing command with GPU options
+    # Build testing command with GPU options (use same GPU config as training)
     TEST_CMD="python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE"
     if [[ "$SINGLE_GPU" == true ]]; then
         TEST_CMD="$TEST_CMD --single-gpu"
