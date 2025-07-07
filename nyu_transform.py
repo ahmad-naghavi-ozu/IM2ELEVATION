@@ -485,10 +485,12 @@ class PreprocessInput(object):
     This preprocessing step ensures input compatibility without modifying the original pipeline.
     """
     
+    # Class-level flag to show Dublin message only once across all instances
+    _dublin_message_shown = False
+    
     def __init__(self, max_size=440, dataset_name=None):
         self.max_size = max_size
         self.dataset_name = dataset_name
-        self.dublin_message_shown = False  # Flag to show Dublin message only once
     
     def __call__(self, sample):
         image, depth = sample['image'], sample['depth']
@@ -498,9 +500,9 @@ class PreprocessInput(object):
         
         # Special handling for Dublin dataset - use direct center-crop approach as per original paper
         if self.dataset_name and 'dublin' in self.dataset_name.lower():
-            if not self.dublin_message_shown:
+            if not PreprocessInput._dublin_message_shown:
                 print(f"Dublin dataset detected - using direct center-crop approach (no resizing)")
-                self.dublin_message_shown = True
+                PreprocessInput._dublin_message_shown = True
             # For Dublin, we skip the resizing step and let CenterCrop handle the size adjustment
             # This follows the original paper methodology for Dublin dataset
             return {'image': image, 'depth': depth}
