@@ -13,6 +13,9 @@ OUTPUT_DIR="models_output"
 CSV_PATH=""
 RESUME_EPOCH=0
 RESUME_MODEL=""
+GPU_IDS="0,1,2,3"
+SINGLE_GPU=false
+BATCH_SIZE=2
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 
 # Help function
@@ -30,12 +33,21 @@ Options:
     -c, --csv PATH              Path to training CSV file (auto-detected if not specified)
     -r, --resume EPOCH          Resume training from epoch (default: 0)
     -m, --model PATH            Path to model file for resuming (required if --resume > 0)
+    --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
+    --single-gpu                Use single GPU for training
+    -b, --batch-size NUM        Batch size per GPU for training (default: 2)
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     -h, --help                  Show this help message
 
 Examples:
     # Basic training
     $0 --dataset DFC2023Amini --epochs 50
+
+    # Use specific GPUs
+    $0 --dataset DFC2023Amini --epochs 50 --gpu-ids "0,1"
+
+    # Single GPU training
+    $0 --dataset DFC2023Amini --epochs 50 --single-gpu
 
     # Resume training from epoch 30
     $0 --dataset DFC2023Amini --resume 30 --model models_output/DFC2023Amini/DFC2023Amini_model_29.pth.tar
@@ -74,6 +86,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--model)
             RESUME_MODEL="$2"
+            shift 2
+            ;;
+        --gpu-ids)
+            GPU_IDS="$2"
+            shift 2
+            ;;
+        --single-gpu)
+            SINGLE_GPU=true
+            shift
+            ;;
+        -b|--batch-size)
+            BATCH_SIZE="$2"
             shift 2
             ;;
         --no-resume)
@@ -151,6 +175,12 @@ echo "Training CSV:   $CSV_PATH"
 echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
 echo "Output Dir:     $DATASET_OUTPUT_DIR"
+echo "Batch Size:     $BATCH_SIZE"
+if [[ "$SINGLE_GPU" == true ]]; then
+    echo "GPU Mode:       Single GPU (GPU 0)"
+else
+    echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
+fi
 echo "Resume Epoch:   $RESUME_EPOCH"
 echo "Auto Resume:    $AUTO_RESUME"
 if [[ $RESUME_EPOCH -gt 0 ]]; then
@@ -177,10 +207,18 @@ TRAIN_CMD="$TRAIN_CMD --data $DATASET_OUTPUT_DIR"
 TRAIN_CMD="$TRAIN_CMD --csv $CSV_PATH"
 TRAIN_CMD="$TRAIN_CMD --epochs $EPOCHS"
 TRAIN_CMD="$TRAIN_CMD --lr $LEARNING_RATE"
+TRAIN_CMD="$TRAIN_CMD --batch-size $BATCH_SIZE"
 TRAIN_CMD="$TRAIN_CMD --start_epoch $RESUME_EPOCH"
 
 if [[ $RESUME_EPOCH -gt 0 ]]; then
     TRAIN_CMD="$TRAIN_CMD --model $RESUME_MODEL"
+fi
+
+# Add GPU options
+if [[ "$SINGLE_GPU" == true ]]; then
+    TRAIN_CMD="$TRAIN_CMD --single-gpu"
+else
+    TRAIN_CMD="$TRAIN_CMD --gpu-ids $GPU_IDS"
 fi
 
 # Start training
