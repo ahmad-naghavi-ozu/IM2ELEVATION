@@ -469,7 +469,11 @@ class PreprocessInput(object):
     """
     Preprocessing transform to handle input images of different sizes before the original IM2ELEVATION pipeline.
     
-    For images larger than 440x440:
+    For Dublin dataset:
+    - Uses direct center-crop approach as per the original paper methodology
+    - No resizing is applied to maintain the original Dublin dataset preprocessing approach
+    
+    For other datasets with images larger than 440x440:
     - Downscales the image to fit within 440x440 while preserving aspect ratio
     - Also applies the same scaling to the depth map to maintain spatial consistency
     
@@ -481,8 +485,10 @@ class PreprocessInput(object):
     This preprocessing step ensures input compatibility without modifying the original pipeline.
     """
     
-    def __init__(self, max_size=440):
+    def __init__(self, max_size=440, dataset_name=None):
         self.max_size = max_size
+        self.dataset_name = dataset_name
+        self.dublin_message_shown = False  # Flag to show Dublin message only once
     
     def __call__(self, sample):
         image, depth = sample['image'], sample['depth']
@@ -490,6 +496,16 @@ class PreprocessInput(object):
         # Get original dimensions
         w, h = image.size
         
+        # Special handling for Dublin dataset - use direct center-crop approach as per original paper
+        if self.dataset_name and 'dublin' in self.dataset_name.lower():
+            if not self.dublin_message_shown:
+                print(f"Dublin dataset detected - using direct center-crop approach (no resizing)")
+                self.dublin_message_shown = True
+            # For Dublin, we skip the resizing step and let CenterCrop handle the size adjustment
+            # This follows the original paper methodology for Dublin dataset
+            return {'image': image, 'depth': depth}
+        
+        # For other datasets, continue with the original logic
         # Check for minimum size requirement and warn user
         if w < self.max_size or h < self.max_size:
             print(f"WARNING: Input image size ({w}x{h}) is smaller than required {self.max_size}x{self.max_size}!")

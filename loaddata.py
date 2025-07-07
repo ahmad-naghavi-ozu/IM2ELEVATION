@@ -48,7 +48,7 @@ class depthDataset(Dataset):
     def __len__(self):
         return len(self.frame)
 
-def getTrainingData(batch_size=64,csv_data=''):
+def getTrainingData(batch_size=64, csv_data='', dataset_name=None):
     __imagenet_pca = {
         'eigval': torch.Tensor([0.2175, 0.0188, 0.0045]),
         'eigvec': torch.Tensor([
@@ -66,7 +66,7 @@ def getTrainingData(batch_size=64,csv_data=''):
     csv = csv_data
     transformed_training_trans =  depthDataset(csv_file=csv,
                                         transform=transforms.Compose([
-                                            PreprocessInput(max_size=440),  # New preprocessing step
+                                            PreprocessInput(max_size=440, dataset_name=dataset_name),  # New preprocessing step with dataset name
                                             #RandomHorizontalFlip(),
                                             CenterCrop([440, 440], [220, 220]),
                                             ToTensor(),
@@ -98,7 +98,7 @@ def getTrainingData(batch_size=64,csv_data=''):
     return dataloader_training
 
 
-def getTestingData(batch_size=3,csv=''):
+def getTestingData(batch_size=3, csv='', dataset_name=None):
 
     __imagenet_stats = {'mean': [0.485, 0.456, 0.406],
                         'std': [0.229, 0.224, 0.225]}
@@ -118,7 +118,7 @@ def getTestingData(batch_size=3,csv=''):
 
     transformed_testing = depthDataset(csv_file=csvfile,
                                        transform=transforms.Compose([
-                                           PreprocessInput(max_size=440),  # New preprocessing step
+                                           PreprocessInput(max_size=440, dataset_name=dataset_name),  # New preprocessing step with dataset name
                                            CenterCrop([440, 440],[440,440]),
                                            ToTensor(),
                                            Normalize(__imagenet_stats['mean'],
