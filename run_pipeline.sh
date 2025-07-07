@@ -17,6 +17,7 @@ SKIP_TESTING=false
 GPU_IDS="1,2"
 SINGLE_GPU=false
 BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
+AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 
 # Help function
 show_help() {
@@ -38,6 +39,7 @@ Options:
     --skip-testing              Skip testing (only generate CSV and train)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
     --single-gpu                Use single GPU for training/testing
+    --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 2)
     -h, --help                  Show this help message
 
@@ -99,6 +101,10 @@ while [[ $# -gt 0 ]]; do
             SINGLE_GPU=true
             shift
             ;;
+        --no-resume)
+            AUTO_RESUME=false
+            shift
+            ;;
         -b|--batch-size)
             BATCH_SIZE="$2"
             shift 2
@@ -151,6 +157,7 @@ echo "Learning Rate:  $LEARNING_RATE"
 echo "Batch Size:     $BATCH_SIZE"
 echo "GPU IDs:        $GPU_IDS"
 echo "Single GPU:     $SINGLE_GPU"
+echo "Auto Resume:    $AUTO_RESUME"
 echo ""
 echo "Pipeline Steps:"
 echo "  CSV Generation: $([ "$SKIP_CSV_GENERATION" == true ] && echo "SKIP" || echo "RUN")"
@@ -249,8 +256,31 @@ if [[ "$SKIP_TRAINING" == false ]]; then
     # Dataset-specific output directory was already created earlier
     # Just reference it here
     
+    # Check for existing checkpoints and auto-resume if enabled
+    RESUME_ARGS=""
+    if [[ "$AUTO_RESUME" == true ]]; then
+        # Look for latest checkpoint
+        LATEST_CHECKPOINT=$(find "$DATASET_OUTPUT_DIR" -name "*_model_latest.pth.tar" 2>/dev/null | head -1)
+        if [[ -n "$LATEST_CHECKPOINT" && -f "$LATEST_CHECKPOINT" ]]; then
+            # Extract epoch number from checkpoint file
+            LATEST_EPOCH=$(python -c "
+import torch
+try:
+    checkpoint = torch.load('$LATEST_CHECKPOINT', map_location='cpu')
+    print(checkpoint.get('epoch', 0) + 1)
+except:
+    print(0)
+")
+            if [[ $LATEST_EPOCH -gt 0 ]]; then
+                echo "Found existing checkpoint: $(basename "$LATEST_CHECKPOINT")"
+                echo "Resuming training from epoch $LATEST_EPOCH"
+                RESUME_ARGS="--start_epoch $LATEST_EPOCH --model $LATEST_CHECKPOINT"
+            fi
+        fi
+    fi
+    
     # Build training command with GPU options
-    TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE"
+    TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE $RESUME_ARGS"
     if [[ "$SINGLE_GPU" == true ]]; then
         TRAIN_CMD="$TRAIN_CMD --single-gpu"
     else
