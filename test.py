@@ -43,6 +43,9 @@ def main():
                         help='batch size for testing (default: 3)')
     args = parser.parse_args()
     
+    # Extract dataset name from model path for preprocessing
+    dataset_name = os.path.basename(args.model.rstrip('/'))
+    
     # Configure GPU usage
     if args.single_gpu:
         device_ids = [0]
@@ -105,7 +108,7 @@ def main():
             warnings.simplefilter("ignore")
             model.load_state_dict(state_dict, strict=False)
 
-    test_loader = loaddata.getTestingData(args.batch_size,args.csv)
+    test_loader = loaddata.getTestingData(args.batch_size, args.csv, dataset_name)
     result = test(test_loader, model, args, checkpoint_name)
     
     print("=" * 60)

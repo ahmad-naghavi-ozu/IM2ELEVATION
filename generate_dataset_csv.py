@@ -23,20 +23,28 @@ import argparse
 from pathlib import Path
 
 
-def get_matching_files(rgb_dir, dsm_dir, rgb_pattern="*.tif", dsm_pattern="*.tif"):
+def get_matching_files(rgb_dir, dsm_dir, rgb_patterns=None, dsm_patterns=None):
     """
     Find matching RGB and DSM files based on filename.
     
     Args:
         rgb_dir: Path to RGB images directory
         dsm_dir: Path to DSM images directory
-        rgb_pattern: Pattern for RGB files (default: "*.tif")
-        dsm_pattern: Pattern for DSM files (default: "*.tif")
+        rgb_patterns: List of patterns for RGB files (default: ["*.tif", "*.png", "*.jpg", "*.jpeg"])
+        dsm_patterns: List of patterns for DSM files (default: ["*.tif", "*.png", "*.jpg", "*.jpeg"])
     
     Returns:
         List of tuples (rgb_path, dsm_path)
     """
-    rgb_files = glob.glob(os.path.join(rgb_dir, rgb_pattern))
+    if rgb_patterns is None:
+        rgb_patterns = ["*.tif", "*.png", "*.jpg", "*.jpeg"]
+    if dsm_patterns is None:
+        dsm_patterns = ["*.tif", "*.png", "*.jpg", "*.jpeg"]
+    
+    # Get all RGB files with supported extensions
+    rgb_files = []
+    for pattern in rgb_patterns:
+        rgb_files.extend(glob.glob(os.path.join(rgb_dir, pattern)))
     rgb_files.sort()
     
     matched_pairs = []
@@ -52,14 +60,18 @@ def get_matching_files(rgb_dir, dsm_dir, rgb_pattern="*.tif", dsm_pattern="*.tif
         # Remove extension
         base_name = os.path.splitext(base_name)[0]
         
-        # Look for corresponding DSM file
-        possible_dsm_names = [
-            f"DSM_{base_name}.tif",
-            f"{base_name}.tif",
-            f"dsm_{base_name}.tif",
-            os.path.splitext(rgb_filename)[0].replace('RGB', 'DSM') + '.tif',
-            os.path.splitext(rgb_filename)[0].replace('rgb', 'dsm') + '.tif'
-        ]
+        # Look for corresponding DSM file with multiple possible extensions
+        dsm_extensions = ['.tif', '.png', '.jpg', '.jpeg']
+        possible_dsm_names = []
+        
+        for ext in dsm_extensions:
+            possible_dsm_names.extend([
+                f"DSM_{base_name}{ext}",
+                f"{base_name}{ext}",
+                f"dsm_{base_name}{ext}",
+                os.path.splitext(rgb_filename)[0].replace('RGB', 'DSM') + ext,
+                os.path.splitext(rgb_filename)[0].replace('rgb', 'dsm') + ext
+            ])
         
         dsm_path = None
         for dsm_name in possible_dsm_names:
@@ -73,8 +85,11 @@ def get_matching_files(rgb_dir, dsm_dir, rgb_pattern="*.tif", dsm_pattern="*.tif
         else:
             print(f"Warning: No matching DSM file found for {rgb_filename}")
     
-    # Check for DSM files without RGB matches
-    dsm_files = glob.glob(os.path.join(dsm_dir, dsm_pattern))
+    # Check for DSM files without RGB matches - support multiple extensions
+    dsm_files = []
+    for pattern in dsm_patterns:
+        dsm_files.extend(glob.glob(os.path.join(dsm_dir, pattern)))
+    
     dsm_basenames = set()
     for dsm_file in dsm_files:
         dsm_filename = os.path.basename(dsm_file)
@@ -95,7 +110,7 @@ def get_matching_files(rgb_dir, dsm_dir, rgb_pattern="*.tif", dsm_pattern="*.tif
     return matched_pairs
 
 
-def generate_csv_for_split(dataset_root, split_name, output_dir, dataset_name):
+def generate_csv_for_split(dataset_root, split_name, output_dir, dataset_name, rgb_patterns=None, dsm_patterns=None):
     """
     Generate CSV file for a specific dataset split.
     
@@ -104,7 +119,13 @@ def generate_csv_for_split(dataset_root, split_name, output_dir, dataset_name):
         split_name: Name of the split (train, valid, test)
         output_dir: Directory to save the CSV file
         dataset_name: Name of the dataset for CSV filename
+        rgb_patterns: List of patterns for RGB files
+        dsm_patterns: List of patterns for DSM files
     """
+    if rgb_patterns is None:
+        rgb_patterns = ["*.tif", "*.png", "*.jpg", "*.jpeg"]
+    if dsm_patterns is None:
+        dsm_patterns = ["*.tif", "*.png", "*.jpg", "*.jpeg"]
     split_dir = os.path.join(dataset_root, split_name)
     rgb_dir = os.path.join(split_dir, 'rgb')
     dsm_dir = os.path.join(split_dir, 'dsm')
@@ -118,8 +139,15 @@ def generate_csv_for_split(dataset_root, split_name, output_dir, dataset_name):
         print(f"Warning: DSM directory not found: {dsm_dir}")
         return
     
+    # Print directory info for debugging
+    rgb_extensions = [pattern.replace('*.', '') for pattern in rgb_patterns]
+    dsm_extensions = [pattern.replace('*.', '') for pattern in dsm_patterns]
+    rgb_files_count = len([f for f in os.listdir(rgb_dir) if f.lower().split('.')[-1] in [ext.lower() for ext in rgb_extensions]])
+    dsm_files_count = len([f for f in os.listdir(dsm_dir) if f.lower().split('.')[-1] in [ext.lower() for ext in dsm_extensions]])
+    print(f"Processing {split_name} split: {rgb_files_count} RGB files, {dsm_files_count} DSM files")
+    
     # Get matching file pairs
-    matched_pairs = get_matching_files(rgb_dir, dsm_dir)
+    matched_pairs = get_matching_files(rgb_dir, dsm_dir, rgb_patterns, dsm_patterns)
     
     if not matched_pairs:
         print(f"Warning: No matching file pairs found for {split_name} split")
@@ -137,7 +165,7 @@ def generate_csv_for_split(dataset_root, split_name, output_dir, dataset_name):
     print(f"Generated {csv_filename} with {len(matched_pairs)} file pairs")
 
 
-def combine_train_valid_splits(dataset_root, output_dir, dataset_name):
+def combine_train_valid_splits(dataset_root, output_dir, dataset_name, rgb_patterns=None, dsm_patterns=None):
     """
     Combine train and valid splits into a single train CSV file.
     
@@ -145,7 +173,13 @@ def combine_train_valid_splits(dataset_root, output_dir, dataset_name):
         dataset_root: Root directory of the dataset
         output_dir: Directory to save the CSV file
         dataset_name: Name of the dataset for CSV filename
+        rgb_patterns: List of patterns for RGB files
+        dsm_patterns: List of patterns for DSM files
     """
+    if rgb_patterns is None:
+        rgb_patterns = ["*.tif", "*.png", "*.jpg", "*.jpeg"]
+    if dsm_patterns is None:
+        dsm_patterns = ["*.tif", "*.png", "*.jpg", "*.jpeg"]
     train_dir = os.path.join(dataset_root, 'train')
     valid_dir = os.path.join(dataset_root, 'valid')
     
@@ -157,7 +191,13 @@ def combine_train_valid_splits(dataset_root, output_dir, dataset_name):
         train_dsm_dir = os.path.join(train_dir, 'dsm')
         
         if os.path.exists(train_rgb_dir) and os.path.exists(train_dsm_dir):
-            train_pairs = get_matching_files(train_rgb_dir, train_dsm_dir)
+            rgb_extensions = [pattern.replace('*.', '') for pattern in rgb_patterns]
+            dsm_extensions = [pattern.replace('*.', '') for pattern in dsm_patterns]
+            rgb_files_count = len([f for f in os.listdir(train_rgb_dir) if f.lower().split('.')[-1] in [ext.lower() for ext in rgb_extensions]])
+            dsm_files_count = len([f for f in os.listdir(train_dsm_dir) if f.lower().split('.')[-1] in [ext.lower() for ext in dsm_extensions]])
+            print(f"Processing train split: {rgb_files_count} RGB files, {dsm_files_count} DSM files")
+            
+            train_pairs = get_matching_files(train_rgb_dir, train_dsm_dir, rgb_patterns, dsm_patterns)
             all_pairs.extend(train_pairs)
             print(f"Found {len(train_pairs)} pairs in train split")
         else:
@@ -171,7 +211,13 @@ def combine_train_valid_splits(dataset_root, output_dir, dataset_name):
         valid_dsm_dir = os.path.join(valid_dir, 'dsm')
         
         if os.path.exists(valid_rgb_dir) and os.path.exists(valid_dsm_dir):
-            valid_pairs = get_matching_files(valid_rgb_dir, valid_dsm_dir)
+            rgb_extensions = [pattern.replace('*.', '') for pattern in rgb_patterns]
+            dsm_extensions = [pattern.replace('*.', '') for pattern in dsm_patterns]
+            rgb_files_count = len([f for f in os.listdir(valid_rgb_dir) if f.lower().split('.')[-1] in [ext.lower() for ext in rgb_extensions]])
+            dsm_files_count = len([f for f in os.listdir(valid_dsm_dir) if f.lower().split('.')[-1] in [ext.lower() for ext in dsm_extensions]])
+            print(f"Processing valid split: {rgb_files_count} RGB files, {dsm_files_count} DSM files")
+            
+            valid_pairs = get_matching_files(valid_rgb_dir, valid_dsm_dir, rgb_patterns, dsm_patterns)
             all_pairs.extend(valid_pairs)
             print(f"Found {len(valid_pairs)} pairs in valid split")
             print("Combining train and valid splits into single train CSV")
@@ -205,6 +251,10 @@ def main():
                        help='Dataset splits to process individually (default: test)')
     parser.add_argument('--combine-train-valid', action='store_true', default=True,
                        help='Combine train and valid splits into single train CSV (default: True)')
+    parser.add_argument('--rgb-extensions', nargs='+', default=['tif', 'png', 'jpg', 'jpeg'],
+                       help='Supported RGB file extensions (default: tif png jpg jpeg)')
+    parser.add_argument('--dsm-extensions', nargs='+', default=['tif', 'png', 'jpg', 'jpeg'],
+                       help='Supported DSM file extensions (default: tif png jpg jpeg)')
     
     args = parser.parse_args()
     
@@ -220,25 +270,31 @@ def main():
     # Create output directory if it doesn't exist
     os.makedirs(args.output_dir, exist_ok=True)
     
+    # Convert extensions to glob patterns
+    rgb_patterns = [f"*.{ext}" for ext in args.rgb_extensions]
+    dsm_patterns = [f"*.{ext}" for ext in args.dsm_extensions]
+    
     print(f"Processing dataset: {args.dataset_path}")
     print(f"Dataset name: {args.dataset_name}")
     print(f"Output directory: {args.output_dir}")
+    print(f"RGB extensions: {args.rgb_extensions}")
+    print(f"DSM extensions: {args.dsm_extensions}")
     print("-" * 50)
     
     # Combine train and valid splits (default behavior)
     if args.combine_train_valid:
-        combine_train_valid_splits(args.dataset_path, args.output_dir, args.dataset_name)
+        combine_train_valid_splits(args.dataset_path, args.output_dir, args.dataset_name, rgb_patterns, dsm_patterns)
     else:
         # Process train and valid separately if requested
         if 'train' in args.splits:
-            generate_csv_for_split(args.dataset_path, 'train', args.output_dir, args.dataset_name)
+            generate_csv_for_split(args.dataset_path, 'train', args.output_dir, args.dataset_name, rgb_patterns, dsm_patterns)
         if 'valid' in args.splits:
-            generate_csv_for_split(args.dataset_path, 'valid', args.output_dir, args.dataset_name)
+            generate_csv_for_split(args.dataset_path, 'valid', args.output_dir, args.dataset_name, rgb_patterns, dsm_patterns)
     
     # Process other splits individually
     for split in args.splits:
         if split not in ['train', 'valid']:  # Skip train/valid as they're handled above
-            generate_csv_for_split(args.dataset_path, split, args.output_dir, args.dataset_name)
+            generate_csv_for_split(args.dataset_path, split, args.output_dir, args.dataset_name, rgb_patterns, dsm_patterns)
     
     print("-" * 50)
     print("CSV generation complete!")

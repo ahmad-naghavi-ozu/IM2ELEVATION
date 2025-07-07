@@ -53,7 +53,7 @@ if not os.path.exists(args.data):
     os.makedirs(args.data)
 
 
-def define_model(is_resnet, is_densenet, is_senet):
+def define_model(is_resnet, is_densenet, is_senet, device_id=0):
     if is_resnet:
         original_model = resnet.resnet50(pretrained = True)
         Encoder = modules.E_resnet(original_model) 
@@ -63,6 +63,8 @@ def define_model(is_resnet, is_densenet, is_senet):
         Encoder = modules.E_densenet(original_model)
         model = net.model(Encoder, num_features=2208, block_channel = [192, 384, 1056, 2208])
     if is_senet:
+        # Set the default CUDA device before loading pretrained weights
+        torch.cuda.set_device(device_id)
         original_model = senet.senet154(pretrained='imagenet')
         Encoder = modules.E_senet(original_model)
         model = net.model(Encoder, num_features=2048, block_channel = [256, 512, 1024, 2048])
@@ -91,25 +93,28 @@ def main():
         print(f"Warning: Requested GPU {max(device_ids)} not available. Using available GPUs: {list(range(available_gpus))}")
         device_ids = list(range(min(len(device_ids), available_gpus)))
     
-    model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
- 
+    # Ensure all model parameters are on the first specified GPU before any operations
+    torch.cuda.set_device(device_ids[0])
     
-    if args.start_epoch != 0:
-        if len(device_ids) > 1:
-            model = torch.nn.DataParallel(model, device_ids=device_ids).cuda()
-        else:
-            model = model.cuda()
-        state_dict = torch.load(args.model)['state_dict']
-        model.load_state_dict(state_dict)
-        batch_size = args.batch_size * len(device_ids)  # Scale batch size by number of GPUs
+    model = define_model(is_resnet=False, is_densenet=False, is_senet=True, device_id=device_ids[0])
+    
+    # Move model to first GPU before wrapping with DataParallel
+    if len(device_ids) > 1:
+        model = model.cuda(device_ids[0])  # Move to first GPU first
+        model = torch.nn.DataParallel(model, device_ids=device_ids)
+        print(f"Model wrapped with DataParallel using GPUs: {device_ids}")
     else:
-        if len(device_ids) > 1:
-            model = torch.nn.DataParallel(model, device_ids=device_ids).cuda()
-            print(f"Model wrapped with DataParallel using GPUs: {device_ids}")
-        else:
-            model = model.cuda()
-            print(f"Model moved to single GPU: {device_ids[0]}")
-        batch_size = args.batch_size * len(device_ids)  # Scale batch size by number of GPUs
+        model = model.cuda(device_ids[0])
+        print(f"Model moved to single GPU: {device_ids[0]}")
+    
+    # Ensure the model's state dict is properly loaded if resuming training
+    if args.start_epoch != 0:
+        print(f"Loading checkpoint from {args.model}...")
+        checkpoint = torch.load(args.model, map_location=f'cuda:{device_ids[0]}')
+        model.load_state_dict(checkpoint['state_dict'])
+        print(f"Resumed from epoch {args.start_epoch}")
+    
+    batch_size = args.batch_size * len(device_ids)  # Scale batch size by number of GPUs
     
     print(f"Effective batch size: {batch_size} (base: {args.batch_size} × {len(device_ids)} GPUs)")
 
@@ -119,7 +124,7 @@ def main():
     #optimizer = torch.optim.SGD(model.parameters(), args.lr, weight_decay=args.weight_decay)
     optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
 
-    train_loader = loaddata.getTrainingData(batch_size,args.csv)
+    train_loader = loaddata.getTrainingData(batch_size, args.csv, dataset_name)
 
     logfolder = "runs/"+args.data 
     print(f"Training dataset: {os.path.basename(args.data)}")

@@ -6,15 +6,15 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="DFC2019_crp512_bin"
-DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2019_crp512_bin"
+DATASET_NAME="Dublin"
+DATASET_PATH="/home/asfand/Ahmad/datasets/Dublin"
 EPOCHS=50
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
-GPU_IDS="0,2"
+GPU_IDS="1,2"
 SINGLE_GPU=false
 BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
 
