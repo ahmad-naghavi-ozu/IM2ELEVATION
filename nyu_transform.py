@@ -491,6 +491,8 @@ class PreprocessInput(object):
     def __init__(self, max_size=440, dataset_name=None):
         self.max_size = max_size
         self.dataset_name = dataset_name
+        # Instance-level flag to ensure message is shown only once per instance
+        self._instance_message_shown = False
     
     def __call__(self, sample):
         image, depth = sample['image'], sample['depth']
@@ -500,9 +502,15 @@ class PreprocessInput(object):
         
         # Special handling for Dublin dataset - use direct center-crop approach as per original paper
         if self.dataset_name and 'dublin' in self.dataset_name.lower():
-            if not PreprocessInput._dublin_message_shown:
-                print(f"Dublin dataset detected - using direct center-crop approach (no resizing)")
-                PreprocessInput._dublin_message_shown = True
+            # Only show message once per instance to avoid multiprocessing repetition
+            if not self._instance_message_shown:
+                # Only show message in main worker process to minimize redundant output
+                worker_info = torch.utils.data.get_worker_info()
+                if worker_info is None or worker_info.id == 0:
+                    if not PreprocessInput._dublin_message_shown:
+                        print(f"Dublin dataset detected - using direct center-crop approach (no resizing)")
+                        PreprocessInput._dublin_message_shown = True
+                self._instance_message_shown = True
             # For Dublin, we skip the resizing step and let CenterCrop handle the size adjustment
             # This follows the original paper methodology for Dublin dataset
             return {'image': image, 'depth': depth}
