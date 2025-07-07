@@ -6,13 +6,13 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="DFC2019_crp512_bin"
+DATASET_NAME="Dublin"
 MODEL_BASE_DIR="pipeline_output"
 MODEL_DIR=""
 CSV_PATH=""
 OUTPUT_FILE=""
 SAVE_RESULTS=true
-GPU_IDS="1,3"
+GPU_IDS="0"
 SINGLE_GPU=false
 BATCH_SIZE=1
 
@@ -234,7 +234,31 @@ if [[ "$SAVE_RESULTS" == true ]]; then
     echo ""
     echo "Results Summary:"
     echo "==============="
+    echo "Latest test results:"
     grep -E "Model Loss|MSE|RMSE|MAE|SSIM" "$OUTPUT_FILE" | tail -n 20
+    
+    # Show comparison with paper results based on dataset
+    echo ""
+    echo "Reference (from IM2ELEVATION paper):"
+    case "${DATASET_NAME,,}" in
+        dublin*)
+            echo "Dublin dataset - MAE: 1.46m, RMSE: 3.05m"
+            echo "Note: Significant differences may indicate need for longer training"
+            ;;
+        dfc2018*|*dfc2018*)
+            echo "IEEE DFC2018 dataset - MAE: 1.19m, RMSE: 2.88m"
+            ;;
+        potsdam*|*potsdam*)
+            echo "ISPRS Potsdam dataset - MAE: 1.52m, RMSE: 2.64m"
+            ;;
+        vaihingen*|*vaihingen*)
+            echo "ISPRS Vaihingen dataset - RMSE: 4.66m (MAE not reported)"
+            ;;
+        *)
+            echo "No specific benchmark available for dataset: $DATASET_NAME"
+            echo "General note: Lower MAE and RMSE values indicate better performance"
+            ;;
+    esac
     
 else
     # Run testing with terminal output only
