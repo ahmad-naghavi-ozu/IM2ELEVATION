@@ -13,6 +13,7 @@ OUTPUT_DIR="models_output"
 CSV_PATH=""
 RESUME_EPOCH=0
 RESUME_MODEL=""
+AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 
 # Help function
 show_help() {
@@ -29,6 +30,7 @@ Options:
     -c, --csv PATH              Path to training CSV file (auto-detected if not specified)
     -r, --resume EPOCH          Resume training from epoch (default: 0)
     -m, --model PATH            Path to model file for resuming (required if --resume > 0)
+    --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     -h, --help                  Show this help message
 
 Examples:
@@ -74,6 +76,10 @@ while [[ $# -gt 0 ]]; do
             RESUME_MODEL="$2"
             shift 2
             ;;
+        --no-resume)
+            AUTO_RESUME=false
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -113,6 +119,29 @@ fi
 DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
 mkdir -p "$DATASET_OUTPUT_DIR"
 
+# Auto-resume logic if enabled and no manual resume specified
+if [[ "$AUTO_RESUME" == true && $RESUME_EPOCH -eq 0 && -z "$RESUME_MODEL" ]]; then
+    # Look for latest checkpoint
+    LATEST_CHECKPOINT=$(find "$DATASET_OUTPUT_DIR" -name "*_model_latest.pth.tar" 2>/dev/null | head -1)
+    if [[ -n "$LATEST_CHECKPOINT" && -f "$LATEST_CHECKPOINT" ]]; then
+        # Extract epoch number from checkpoint file
+        LATEST_EPOCH=$(python -c "
+import torch
+try:
+    checkpoint = torch.load('$LATEST_CHECKPOINT', map_location='cpu')
+    print(checkpoint.get('epoch', 0) + 1)
+except:
+    print(0)
+")
+        if [[ $LATEST_EPOCH -gt 0 ]]; then
+            echo "Found existing checkpoint: $(basename "$LATEST_CHECKPOINT")"
+            echo "Auto-resuming training from epoch $LATEST_EPOCH"
+            RESUME_EPOCH=$LATEST_EPOCH
+            RESUME_MODEL="$LATEST_CHECKPOINT"
+        fi
+    fi
+fi
+
 # Print configuration
 echo "======================================"
 echo "IM2ELEVATION Training Configuration"
@@ -123,6 +152,7 @@ echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
 echo "Output Dir:     $DATASET_OUTPUT_DIR"
 echo "Resume Epoch:   $RESUME_EPOCH"
+echo "Auto Resume:    $AUTO_RESUME"
 if [[ $RESUME_EPOCH -gt 0 ]]; then
     echo "Resume Model:   $RESUME_MODEL"
 fi
