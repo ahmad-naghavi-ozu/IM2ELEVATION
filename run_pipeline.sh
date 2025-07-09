@@ -8,13 +8,13 @@ set -e  # Exit on any error
 # Default values
 DATASET_NAME="Dublin"
 DATASET_PATH="/home/asfand/Ahmad/datasets/Dublin"
-EPOCHS=50
+EPOCHS=85
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
-GPU_IDS="0,1,2,3"
+GPU_IDS="0,1"
 SINGLE_GPU=false
 BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
@@ -276,8 +276,15 @@ except:
 ")
             if [[ $LATEST_EPOCH -gt 0 ]]; then
                 echo "Found existing checkpoint: $(basename "$LATEST_CHECKPOINT")"
-                echo "Resuming training from epoch $LATEST_EPOCH"
-                RESUME_ARGS="--start_epoch $LATEST_EPOCH --model $LATEST_CHECKPOINT"
+                echo "Last completed epoch: $((LATEST_EPOCH - 1))"
+                if [[ $LATEST_EPOCH -ge $EPOCHS ]]; then
+                    echo "Training already completed ($((LATEST_EPOCH - 1)) epochs >= $EPOCHS target epochs)"
+                    echo "Skipping training. Use --no-resume to start from scratch."
+                    SKIP_TRAINING=true
+                else
+                    echo "Resuming training from epoch $LATEST_EPOCH to epoch $EPOCHS"
+                    RESUME_ARGS="--start_epoch $LATEST_EPOCH --model $LATEST_CHECKPOINT"
+                fi
             fi
         fi
     fi

@@ -6,6 +6,7 @@ import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 import loaddata
+import util
 import warnings
 import os
 
@@ -131,14 +132,56 @@ def main():
     if not os.path.exists(logfolder):
        os.makedirs(logfolder)
     writer = SummaryWriter(logfolder)
+    
+    # Create training log file
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"{args.data}/training_log_{dataset_name}_{timestamp}.txt"
+    
+    def log_and_print(message):
+        """Print to console and log to file"""
+        print(message, flush=True)
+        with open(log_filename, 'a') as f:
+            f.write(message + '\n')
+            f.flush()
+    
+    # Log training configuration
+    log_and_print(f"=== IM2ELEVATION Training Started: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
+    log_and_print(f"Dataset: {dataset_name}")
+    log_and_print(f"Epochs: {args.epochs}")
+    log_and_print(f"Batch Size: {batch_size}")
+    log_and_print(f"Learning Rate: {args.lr}")
+    log_and_print(f"Device IDs: {device_ids}")
+    log_and_print(f"Training CSV: {args.csv}")
+    log_and_print(f"Output Directory: {args.data}")
+    log_and_print(f"Log File: {log_filename}")
+    log_and_print("=" * 60)
  
-    # Best checkpoint tracking
-    best_loss = float('inf')
+    # Best checkpoint tracking based on test set performance (like original IM2ELEVATION)
+    best_rmse = float('inf')
     best_epoch = 0
     best_model_path = None
+    
+    # Load test data for evaluation (reproducing original methodology)
+    test_csv = args.csv.replace('train_', 'test_')
+    if not os.path.exists(test_csv):
+        print(f"Warning: Test CSV not found at {test_csv}")
+        print("Falling back to training loss for best checkpoint selection")
+        use_test_evaluation = False
+        best_loss = float('inf')
+    else:
+        print(f"Using test set evaluation for best checkpoint: {test_csv}")
+        use_test_evaluation = True
 
-    print(f"Starting training for {args.epochs} epochs...")
-    print("=" * 60)
+    log_and_print(f"Starting training for {args.epochs} epochs...")
+    log_and_print("=" * 60)
+
+    # Validate epoch range
+    if args.start_epoch >= args.epochs:
+        log_and_print(f"Warning: Start epoch ({args.start_epoch}) >= total epochs ({args.epochs})")
+        log_and_print("No training epochs to run. Training completed.")
+        log_and_print("=" * 50)
+        return
 
     for epoch in range(args.start_epoch, args.epochs):
 
@@ -147,31 +190,60 @@ def main():
         # Train and get average loss for this epoch
         avg_loss = train(train_loader, model, optimizer, epoch, writer)
         
-        # Only save checkpoint if this is the best model so far
-        if avg_loss < best_loss:
-            best_loss = avg_loss
-            best_epoch = epoch
+        # Evaluate on test set to select best model (like original authors did)
+        if use_test_evaluation:
+            test_rmse = run_test_evaluation(model, test_csv, dataset_name, epoch)
             
-            # Remove previous best checkpoint to save space
-            if best_model_path and os.path.exists(best_model_path):
-                os.remove(best_model_path)
-                print(f"Removed previous checkpoint: {os.path.basename(best_model_path)}", flush=True)
-            
-            # Save new best checkpoint
-            best_model_path = save_model + f'best_epoch_{epoch}.pth.tar'
-            modelname = save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch, 'loss': avg_loss}, best_model_path)
-            print(f"🏆 NEW BEST! Epoch {epoch}, Loss: {avg_loss:.4f}", flush=True)
+            # Save checkpoint if this is the best model so far based on test RMSE
+            if test_rmse < best_rmse:
+                best_rmse = test_rmse
+                best_epoch = epoch
+                
+                # Remove previous best checkpoint to save space
+                if best_model_path and os.path.exists(best_model_path):
+                    os.remove(best_model_path)
+                    log_and_print(f"Removed previous checkpoint: {os.path.basename(best_model_path)}")
+                
+                # Save new best checkpoint
+                best_model_path = save_model + f'best_epoch_{epoch}.pth.tar'
+                modelname = save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch, 'loss': avg_loss}, best_model_path)
+                log_and_print(f"🏆 NEW BEST! Epoch {epoch}, Test RMSE: {test_rmse:.4f} (Train Loss: {avg_loss:.4f})")
+            else:
+                log_and_print(f"Epoch {epoch}, Train Loss: {avg_loss:.4f}, Test RMSE: {test_rmse:.4f} (Best: {best_rmse:.4f} at epoch {best_epoch})")
         else:
-            print(f"Epoch {epoch}, Loss: {avg_loss:.4f} (Best: {best_loss:.4f} at epoch {best_epoch})", flush=True)
+            # Fallback to training loss if test data not available
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+                best_epoch = epoch
+                
+                # Remove previous best checkpoint to save space
+                if best_model_path and os.path.exists(best_model_path):
+                    os.remove(best_model_path)
+                    log_and_print(f"Removed previous checkpoint: {os.path.basename(best_model_path)}")
+                
+                # Save new best checkpoint
+                best_model_path = save_model + f'best_epoch_{epoch}.pth.tar'
+                modelname = save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch, 'loss': avg_loss}, best_model_path)
+                log_and_print(f"🏆 NEW BEST! Epoch {epoch}, Loss: {avg_loss:.4f}")
+            else:
+                log_and_print(f"Epoch {epoch}, Loss: {avg_loss:.4f} (Best: {best_loss:.4f} at epoch {best_epoch})")
             
         # Also save latest checkpoint (overwrite each time to save space)
         latest_path = save_model + 'latest.pth.tar'
         save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch, 'loss': avg_loss}, latest_path)
 
-    print("=" * 50, flush=True)
-    print(f"✅ Training completed! Best: Epoch {best_epoch}, Loss: {best_loss:.4f}", flush=True)
-    print(f"📁 Checkpoints: {os.path.basename(best_model_path)}, latest.pth.tar", flush=True)
-    print("=" * 50, flush=True)
+    log_and_print("=" * 50)
+    if use_test_evaluation:
+        log_and_print(f"✅ Training completed! Best: Epoch {best_epoch}, Test RMSE: {best_rmse:.4f}")
+    else:
+        log_and_print(f"✅ Training completed! Best: Epoch {best_epoch}, Train Loss: {best_loss:.4f}")
+    
+    # Handle case where no epochs were run (e.g., when resuming with start_epoch >= epochs)
+    if best_model_path is not None:
+        log_and_print(f"📁 Checkpoints: {os.path.basename(best_model_path)}, latest.pth.tar")
+    else:
+        log_and_print("📁 No new checkpoints created (no epochs were run)")
+    log_and_print("=" * 50)
         
 
 
@@ -293,6 +365,86 @@ class AverageMeter(object):
 def save_checkpoint(state, filename='test.pth.tar'):
     torch.save(state, filename)
     return filename
+
+
+def run_test_evaluation(model, test_csv, dataset_name, epoch):
+    """
+    Run test evaluation by using the existing test.py script.
+    This reproduces the original IM2ELEVATION methodology where authors
+    likely manually tested each checkpoint after each epoch.
+    """
+    import tempfile
+    import subprocess
+    import shutil
+    import re
+    
+    # Save current model state temporarily
+    temp_dir = tempfile.mkdtemp()
+    temp_model_path = os.path.join(temp_dir, f'temp_epoch_{epoch}.pth.tar')
+    save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch}, temp_model_path)
+    
+    # Handle multi-GPU models properly
+    is_dataparallel = isinstance(model, torch.nn.DataParallel)
+    if is_dataparallel:
+        # For DataParallel models, get the original device info
+        original_device_ids = model.device_ids
+        original_output_device = model.output_device
+        # Temporarily move the wrapped model to CPU
+        model.module.cpu()
+    else:
+        # For single GPU models
+        original_device = next(model.parameters()).device
+        model.cpu()
+    
+    torch.cuda.empty_cache()  # Clear GPU cache
+    
+    try:
+        # Run test.py script on the temporary checkpoint
+        cmd = [
+            'python', 'test.py',
+            '--model', temp_dir,
+            '--csv', test_csv,
+            '--batch-size', '1',  # Use smaller batch size for test evaluation
+            '--single-gpu'
+        ]
+        
+        # Capture output
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
+        
+        if result.returncode != 0:
+            print(f"Warning: Test evaluation failed for epoch {epoch}")
+            print(f"Error: {result.stderr}")
+            return float('inf')  # Return worst possible RMSE
+        
+        # Parse RMSE from output
+        output_lines = result.stdout.split('\n')
+        for line in output_lines:
+            if 'RMSE:' in line:
+                # Extract RMSE value from line like "Loss: -1.0235 | MSE: 247.5982 | RMSE: 15.7353 | MAE: 10.6550 | SSIM: 0.0290"
+                rmse_match = re.search(r'RMSE:\s*([0-9.]+)', line)
+                if rmse_match:
+                    return float(rmse_match.group(1))
+        
+        print(f"Warning: Could not parse RMSE from test output for epoch {epoch}")
+        return float('inf')
+        
+    except Exception as e:
+        print(f"Error running test evaluation for epoch {epoch}: {e}")
+        return float('inf')
+    
+    finally:
+        # Restore model to original device configuration
+        if is_dataparallel:
+            # Move the wrapped model back to the first GPU
+            model.module.cuda(original_device_ids[0])
+        else:
+            # Move single GPU model back to original device
+            model.to(original_device)
+        
+        torch.cuda.empty_cache()  # Clear GPU cache again
+        
+        # Clean up temporary files
+        shutil.rmtree(temp_dir)
 
 
 
