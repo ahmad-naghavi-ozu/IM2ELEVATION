@@ -191,7 +191,7 @@ def main():
         
         # Evaluate on test set to select best model (like original authors did)
         if use_test_evaluation:
-            test_rmse = run_test_evaluation(model, test_csv, dataset_name, epoch)
+            test_rmse = run_test_evaluation(model, test_csv, dataset_name, epoch, device_ids)
             
             # Save checkpoint if this is the best model so far based on test RMSE
             if test_rmse < best_rmse:
@@ -366,7 +366,7 @@ def save_checkpoint(state, filename='test.pth.tar'):
     return filename
 
 
-def run_test_evaluation(model, test_csv, dataset_name, epoch):
+def run_test_evaluation(model, test_csv, dataset_name, epoch, device_ids):
     """
     Run test evaluation by using the existing test.py script.
     This reproduces the original IM2ELEVATION methodology where authors
@@ -404,7 +404,7 @@ def run_test_evaluation(model, test_csv, dataset_name, epoch):
             '--model', temp_dir,
             '--csv', test_csv,
             '--batch-size', '1',  # Use smaller batch size for test evaluation
-            '--single-gpu'
+            '--gpu-ids', str(device_ids[0])  # Use the first GPU from training
         ]
         
         # Capture output
