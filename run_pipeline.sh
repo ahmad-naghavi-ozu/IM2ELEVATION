@@ -182,10 +182,18 @@ fi
 echo "Auto Resume:    $AUTO_RESUME"
 echo ""
 
-# Check GPU memory status before starting
-echo "GPU Memory Status Before Pipeline:"
-python gpu_memory_manager.py --info --suggest-batch-size
-echo ""
+# Check GPU memory status before starting (if utility available)
+if command -v python >/dev/null 2>&1 && [ -f "gpu_memory_manager.py" ]; then
+    echo "GPU Memory Status Before Pipeline:"
+    python gpu_memory_manager.py --info --suggest-batch-size 2>/dev/null || {
+        echo "GPU memory manager not available, continuing without memory check..."
+        python -c "import torch; print(f'Available GPUs: {torch.cuda.device_count()}')" 2>/dev/null || echo "CUDA not available"
+    }
+    echo ""
+else
+    echo "GPU memory manager not available, skipping memory check..."
+    echo ""
+fi
 
 echo "Pipeline Steps:"
 echo "  CSV Generation: $([ "$SKIP_CSV_GENERATION" == true ] && echo "SKIP" || echo "RUN")"
@@ -335,7 +343,11 @@ except:
     
     # Clear GPU memory after training
     echo "Clearing GPU memory after training..."
-    python gpu_memory_manager.py --clear
+    if [ -f "gpu_memory_manager.py" ]; then
+        python gpu_memory_manager.py --clear
+    else
+        python -c "import torch; torch.cuda.empty_cache(); print('GPU cache cleared')" 2>/dev/null || echo "Could not clear GPU cache"
+    fi
     
     # Check if training actually succeeded by looking for model files
     DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
@@ -395,7 +407,11 @@ if [[ "$SKIP_TESTING" == false ]]; then
     
     # Clear GPU memory before testing
     echo "Clearing GPU memory cache before testing..."
-    python gpu_memory_manager.py --clear
+    if [ -f "gpu_memory_manager.py" ]; then
+        python gpu_memory_manager.py --clear
+    else
+        python -c "import torch; torch.cuda.empty_cache(); print('GPU cache cleared')" 2>/dev/null || echo "Could not clear GPU cache"
+    fi
     
     # Build testing command with GPU options and memory management
     TEST_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
@@ -479,7 +495,11 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     
     # Clear GPU memory before evaluation
     echo "Clearing GPU memory cache before evaluation..."
-    python gpu_memory_manager.py --clear
+    if [ -f "gpu_memory_manager.py" ]; then
+        python gpu_memory_manager.py --clear
+    else
+        python -c "import torch; torch.cuda.empty_cache(); print('GPU cache cleared')" 2>/dev/null || echo "Could not clear GPU cache"
+    fi
     
     # Build evaluation command with memory management
     EVAL_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
