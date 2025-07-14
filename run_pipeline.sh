@@ -16,8 +16,7 @@ SKIP_TRAINING=false
 SKIP_TESTING=false
 SKIP_EVALUATION=false
 GPU_IDS="0,1"
-SINGLE_GPU=false
-BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
+BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 FORCE_REGENERATE_PREDICTIONS=false
 
@@ -40,11 +39,10 @@ Options:
     --skip-training             Skip training (use existing models for testing)
     --skip-testing              Skip testing (only generate CSV and train)
     --skip-evaluation           Skip evaluation (only generate CSV, train, and test)
-    --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
-    --single-gpu                Use single GPU for training/testing
+    --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1)
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     --force-regenerate          Force regenerate predictions during evaluation
-    -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 2)
+    -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 1)
     -h, --help                  Show this help message
 
 Examples:
@@ -60,8 +58,11 @@ Examples:
     # Only test and evaluate existing models
     $0 --dataset DFC2023Amini --skip-csv --skip-training
 
-    # Skip evaluation step
-    $0 --dataset DFC2023S --skip-evaluation
+    # Use specific GPU (single GPU automatically detected)
+    $0 --dataset DFC2023S --gpu-ids 2
+
+    # Use multiple GPUs (multi-GPU automatically detected)
+    $0 --dataset DFC2023S --gpu-ids 0,1,2
 
     # Force regenerate predictions during evaluation
     $0 --dataset DFC2023S --force-regenerate
@@ -110,10 +111,6 @@ while [[ $# -gt 0 ]]; do
         --gpu-ids)
             GPU_IDS="$2"
             shift 2
-            ;;
-        --single-gpu)
-            SINGLE_GPU=true
-            shift
             ;;
         --no-resume)
             AUTO_RESUME=false
@@ -173,13 +170,23 @@ echo "Output Dir:     $OUTPUT_DIR"
 echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
 echo "Batch Size:     $BATCH_SIZE"
-if [[ "$SINGLE_GPU" == true ]]; then
-    echo "GPU Mode:       Single GPU (GPU 0)"
+
+# Determine GPU mode based on the number of GPUs specified
+GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+if [[ $GPU_COUNT -eq 1 ]]; then
+    echo "GPU Mode:       Single GPU ($GPU_IDS)"
 else
     echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
 fi
+
 echo "Auto Resume:    $AUTO_RESUME"
 echo ""
+
+# Check GPU memory status before starting
+echo "GPU Memory Status Before Pipeline:"
+python gpu_memory_manager.py --info --suggest-batch-size
+echo ""
+
 echo "Pipeline Steps:"
 echo "  CSV Generation: $([ "$SKIP_CSV_GENERATION" == true ] && echo "SKIP" || echo "RUN")"
 echo "  Training:       $([ "$SKIP_TRAINING" == true ] && echo "SKIP" || echo "RUN")"
@@ -213,7 +220,6 @@ fi
     echo "  Skip Testing: $SKIP_TESTING"
     echo "  Skip Evaluation: $SKIP_EVALUATION"
     echo "  GPU IDs: $GPU_IDS"
-    echo "  Single GPU: $SINGLE_GPU"
     echo "  Batch Size: $BATCH_SIZE"
     echo "  Force Regenerate Predictions: $FORCE_REGENERATE_PREDICTIONS"
     echo ""
@@ -310,13 +316,8 @@ except:
         fi
     fi
     
-    # Build training command with GPU options
-    TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE $RESUME_ARGS"
-    if [[ "$SINGLE_GPU" == true ]]; then
-        TRAIN_CMD="$TRAIN_CMD --single-gpu"
-    else
-        TRAIN_CMD="$TRAIN_CMD --gpu-ids $GPU_IDS"
-    fi
+    # Build training command with GPU options and memory management
+    TRAIN_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS $RESUME_ARGS"
     
     echo "Command: $TRAIN_CMD"
     echo ""
@@ -331,6 +332,10 @@ except:
     
     # Execute training with clean output
     eval "$TRAIN_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
+    
+    # Clear GPU memory after training
+    echo "Clearing GPU memory after training..."
+    python gpu_memory_manager.py --clear
     
     # Check if training actually succeeded by looking for model files
     DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
@@ -388,13 +393,12 @@ if [[ "$SKIP_TESTING" == false ]]; then
         exit 1
     fi
     
-    # Build testing command with GPU options (use same GPU config as training)
-    TEST_CMD="python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE"
-    if [[ "$SINGLE_GPU" == true ]]; then
-        TEST_CMD="$TEST_CMD --single-gpu"
-    else
-        TEST_CMD="$TEST_CMD --gpu-ids $GPU_IDS"
-    fi
+    # Clear GPU memory before testing
+    echo "Clearing GPU memory cache before testing..."
+    python gpu_memory_manager.py --clear
+    
+    # Build testing command with GPU options and memory management
+    TEST_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
     
     echo "Command: $TEST_CMD"
     echo "Found ${#MODEL_FILES[@]} model checkpoints to test"
@@ -473,13 +477,12 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
         exit 1
     fi
     
-    # Build evaluation command
-    EVAL_CMD="python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions"
-    if [[ "$SINGLE_GPU" == true ]]; then
-        EVAL_CMD="$EVAL_CMD --single-gpu --gpu-ids $(echo "$GPU_IDS" | cut -d',' -f1)"
-    else
-        EVAL_CMD="$EVAL_CMD --gpu-ids $GPU_IDS"
-    fi
+    # Clear GPU memory before evaluation
+    echo "Clearing GPU memory cache before evaluation..."
+    python gpu_memory_manager.py --clear
+    
+    # Build evaluation command with memory management
+    EVAL_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
     
     echo "Command: $EVAL_CMD"
     echo ""

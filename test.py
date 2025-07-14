@@ -37,8 +37,6 @@ def main():
     parser.add_argument("--outfile")
     parser.add_argument('--gpu-ids', default='0,1,2,3', type=str,
                         help='comma-separated list of GPU IDs to use (default: 0,1,2,3)')
-    parser.add_argument('--single-gpu', action='store_true',
-                        help='use only single GPU (GPU 0)')
     parser.add_argument('--batch-size', default=3, type=int,
                         help='batch size for testing (default: 3)')
     parser.add_argument('--save-predictions', action='store_true',
@@ -49,14 +47,7 @@ def main():
     dataset_name = os.path.basename(args.model.rstrip('/'))
     
     # Configure GPU usage
-    if args.single_gpu:
-        # Use the first GPU from gpu_ids for single GPU mode
-        gpu_list = [int(x.strip()) for x in args.gpu_ids.split(',')]
-        device_ids = [gpu_list[0]]
-        print(f"Using single GPU: {device_ids[0]}")
-    else:
-        device_ids = [int(x.strip()) for x in args.gpu_ids.split(',')]
-        print(f"Using multiple GPUs: {device_ids}")
+    device_ids = [int(x.strip()) for x in args.gpu_ids.split(',')]
     
     # Check if specified GPUs are available
     available_gpus = torch.cuda.device_count()
@@ -65,6 +56,12 @@ def main():
     if max(device_ids) >= available_gpus:
         print(f"Warning: Requested GPU {max(device_ids)} not available. Using available GPUs: {list(range(available_gpus))}")
         device_ids = list(range(min(len(device_ids), available_gpus)))
+    
+    # Determine GPU mode automatically based on number of devices
+    if len(device_ids) == 1:
+        print(f"Using single GPU: {device_ids[0]}")
+    else:
+        print(f"Using multiple GPUs: {device_ids}")
 
     md = glob.glob(args.model+'/*.tar')
     
