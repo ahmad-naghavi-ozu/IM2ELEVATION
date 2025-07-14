@@ -6,11 +6,11 @@
 set -e  # Exit on error
 
 # Default values
-DATASET_NAME=""
+DATASET_NAME="DFC2019_crp512_bin"
 MODEL_PATH=""
-GPU_IDS="0,1,2,3"
+GPU_IDS="2"
 SINGLE_GPU=false
-BATCH_SIZE=3
+BATCH_SIZE=1
 SKIP_PREDICTIONS=false
 FORCE_REGENERATE=false
 
