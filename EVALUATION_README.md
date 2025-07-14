@@ -22,19 +22,24 @@ This document explains the evaluation pipeline and the differences between the v
 python evaluate.py --predictions-dir path/to/predictions --csv-file dataset/test_dataset.csv --dataset-name dataset --output-dir path/to/results
 ```
 
-### 2. `test_with_predictions.py` (New)
-**Purpose**: Modified version of the original `test.py` that can save predictions during inference.
+### 2. `test.py` (Enhanced)
+**Purpose**: Core testing script that evaluates trained models and can optionally save predictions during inference.
 
 **Key Features**:
 - Loads trained IM2ELEVATION model
 - Runs inference on test dataset 
-- Saves prediction outputs as .npy files when `--save-predictions` flag is used
-- Maintains all original testing functionality (loss calculation, basic metrics)
-- Supports same GPU configurations as original test script
+- Calculates standard testing metrics (loss, MSE, RMSE, MAE, SSIM)
+- **Enhanced**: Can save prediction outputs as .npy files when `--save-predictions` flag is used
+- Supports both single-GPU and multi-GPU configurations
+- Automatically selects best checkpoint for evaluation
 
 **Usage**:
 ```bash
-python test_with_predictions.py --model path/to/model --csv dataset/test_dataset.csv --save-predictions --gpu-ids 0,1
+# Standard testing (backward compatible)
+python test.py --model path/to/model --csv dataset/test_dataset.csv
+
+# Enhanced testing with prediction saving
+python test.py --model path/to/model --csv dataset/test_dataset.csv --save-predictions --gpu-ids 0,1
 ```
 
 ## Shell Scripts
@@ -44,7 +49,7 @@ python test_with_predictions.py --model path/to/model --csv dataset/test_dataset
 
 **Features**:
 - Command-line argument parsing (like `run_pipeline.sh`)
-- Generates predictions using `test_with_predictions.py`
+- Generates predictions using enhanced `test.py` with `--save-predictions` flag
 - Evaluates metrics using `evaluate.py`
 - Supports force regeneration of predictions
 - GPU configuration options
@@ -65,7 +70,7 @@ python test_with_predictions.py --model path/to/model --csv dataset/test_dataset
 
 ## Evaluation Pipeline Flow
 
-1. **Prediction Generation** (`test_with_predictions.py`):
+1. **Prediction Generation** (`test.py` with `--save-predictions`):
    - Loads trained model checkpoint
    - Processes test images through model
    - Saves predictions as .npy files (440x440 pixels after interpolation)
@@ -106,7 +111,7 @@ The evaluation pipeline helps address the inconsistencies you mentioned:
 ./run_eval.sh --dataset DFC2023S --gpu-ids 0,1
 
 # Option 2: Manual steps
-python test_with_predictions.py --model pipeline_output/DFC2023S --csv dataset/test_DFC2023S.csv --save-predictions
+python test.py --model pipeline_output/DFC2023S --csv dataset/test_DFC2023S.csv --save-predictions
 python evaluate.py --predictions-dir pipeline_output/DFC2023S/predictions --csv-file dataset/test_DFC2023S.csv --dataset-name DFC2023S
 
 # Option 3: Quick evaluation for DFC2023S

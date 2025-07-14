@@ -474,7 +474,7 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     fi
     
     # Build evaluation command
-    EVAL_CMD="python test_with_predictions.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions"
+    EVAL_CMD="python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions"
     if [[ "$SINGLE_GPU" == true ]]; then
         EVAL_CMD="$EVAL_CMD --single-gpu --gpu-ids $(echo "$GPU_IDS" | cut -d',' -f1)"
     else
