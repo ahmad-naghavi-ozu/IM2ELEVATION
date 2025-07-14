@@ -17,6 +17,7 @@ import os
 import csv
 import re
 import warnings
+from datetime import datetime
 
 # Suppress ALL warnings for clean output
 warnings.filterwarnings("ignore")
@@ -26,12 +27,11 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Reduce CUDA verbosity
 import sys
 from contextlib import redirect_stdout, redirect_stderr
 from io import StringIO
+
 def main():
     model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
 
     parser = argparse.ArgumentParser()
-   
-  
     parser.add_argument("--model")
     parser.add_argument("--csv")
     parser.add_argument("--outfile")
@@ -41,6 +41,8 @@ def main():
                         help='use only single GPU (GPU 0)')
     parser.add_argument('--batch-size', default=3, type=int,
                         help='batch size for testing (default: 3)')
+    parser.add_argument('--save-predictions', action='store_true',
+                        help='save prediction outputs as numpy arrays')
     args = parser.parse_args()
     
     # Extract dataset name from model path for preprocessing
@@ -48,7 +50,9 @@ def main():
     
     # Configure GPU usage
     if args.single_gpu:
-        device_ids = [0]
+        # Use the first GPU from gpu_ids for single GPU mode
+        gpu_list = [int(x.strip()) for x in args.gpu_ids.split(',')]
+        device_ids = [gpu_list[0]]
         print(f"Using single GPU: {device_ids[0]}")
     else:
         device_ids = [int(x.strip()) for x in args.gpu_ids.split(',')]
@@ -91,17 +95,24 @@ def main():
     
     checkpoint_name = os.path.basename(selected_checkpoint)
     
+    # Create predictions directory if saving predictions
+    predictions_dir = None
+    if args.save_predictions:
+        predictions_dir = os.path.join(args.model, 'predictions')
+        os.makedirs(predictions_dir, exist_ok=True)
+        print(f"Predictions will be saved to: {predictions_dir}")
+    
     # Create model with suppressed output
     f = StringIO()
     with redirect_stdout(f), redirect_stderr(f):
         model = define_model(is_resnet=False, is_densenet=False, is_senet=True)
         if len(device_ids) > 1:
-            model = torch.nn.DataParallel(model, device_ids=device_ids).cuda()
+            model = torch.nn.DataParallel(model, device_ids=device_ids).cuda(device_ids[0])
             print(f"Model wrapped with DataParallel using GPUs: {device_ids}")
         else:
-            model = model.cuda()
+            model = model.cuda(device_ids[0])
             print(f"Model moved to single GPU: {device_ids[0]}")
-        state_dict = torch.load(selected_checkpoint, map_location='cuda')['state_dict']
+        state_dict = torch.load(selected_checkpoint, map_location=f'cuda:{device_ids[0]}')['state_dict']
         
         # Load state dict quietly without printing parameter names
         with warnings.catch_warnings():
@@ -109,38 +120,60 @@ def main():
             model.load_state_dict(state_dict, strict=False)
 
     test_loader = loaddata.getTestingData(args.batch_size, args.csv, dataset_name)
-    result = test(test_loader, model, args, checkpoint_name)
+    result = test(test_loader, model, args, checkpoint_name, predictions_dir, args.csv)
     
     print("=" * 60)
 
 
-
-def test(test_loader, model, args, checkpoint_name=""):
-    
+def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv_file=None):
     losses = AverageMeter()
     model.eval()
-    model.cuda()
+    
+    # Get the device from model
+    device = next(model.parameters()).device
+    
     totalNumber = 0
     errorSum = {'MSE': 0, 'RMSE': 0, 'MAE': 0,'SSIM':0}
 
+    # Read CSV file to get image names for saving predictions
+    image_names = []
+    if csv_file and predictions_dir:
+        with open(csv_file, 'r') as f:
+            for line in f:
+                rgb_path = line.strip().split(',')[0]
+                image_name = os.path.basename(rgb_path).replace('.tif', '')
+                image_names.append(image_name)
+
+    prediction_idx = 0
+    
     for i, sample_batched in enumerate(test_loader):
         image, depth = sample_batched['image'], sample_batched['depth']
-        depth = depth.cuda(non_blocking=True)
-        image = image.cuda()
+        depth = depth.to(device, non_blocking=True)
+        image = image.to(device)
         output = model(image)
 
-        output = torch.nn.functional.interpolate(output,size=(440,440),mode='bilinear')
+        output = torch.nn.functional.interpolate(output, size=(440,440), mode='bilinear')
+
+        # Save predictions if requested
+        if predictions_dir:
+            batch_size = output.size(0)
+            for j in range(batch_size):
+                if prediction_idx < len(image_names):
+                    pred_array = output[j, 0].cpu().detach().numpy()  # Remove channel dimension
+                    pred_filename = f"{image_names[prediction_idx]}_pred.npy"
+                    pred_path = os.path.join(predictions_dir, pred_filename)
+                    np.save(pred_path, pred_array)
+                    prediction_idx += 1
 
         batchSize = depth.size(0)
-        testing_loss(depth,output,losses,batchSize)
+        testing_loss(depth, output, losses, batchSize)
 
         totalNumber = totalNumber + batchSize
 
-        errors = util.evaluateError(output, depth,i,batchSize)
+        errors = util.evaluateError(output, depth, i, batchSize)
 
         errorSum = util.addErrors(errorSum, errors, batchSize)
         averageError = util.averageErrors(errorSum, totalNumber)
-     
 
     averageError['RMSE'] = np.sqrt(averageError['MSE'])
     loss = float(losses.avg)
@@ -152,6 +185,9 @@ def test(test_loader, model, args, checkpoint_name=""):
         loss=loss, mse=averageError['MSE'], rmse=averageError['RMSE'], 
         mae=averageError['MAE'], ssim=averageError['SSIM']))
     
+    if predictions_dir:
+        print(f"Saved {prediction_idx} predictions to {predictions_dir}")
+    
     return {
         'checkpoint': checkpoint_name,
         'loss': loss,
@@ -162,14 +198,10 @@ def test(test_loader, model, args, checkpoint_name=""):
     }
 
 
-
-
-
-
-def testing_loss(depth , output, losses, batchSize):
-    
-    ones = torch.ones(depth.size(0), 1, depth.size(2),depth.size(3)).float().cuda()
-    get_gradient = sobel.Sobel().cuda()
+def testing_loss(depth, output, losses, batchSize):
+    device = depth.device
+    ones = torch.ones(depth.size(0), 1, depth.size(2),depth.size(3)).float().to(device)
+    get_gradient = sobel.Sobel().to(device)
     cos = nn.CosineSimilarity(dim=1, eps=0)
     depth_grad = get_gradient(depth)
     output_grad = get_gradient(output)
@@ -189,9 +221,6 @@ def testing_loss(depth , output, losses, batchSize):
     losses.update(loss.item(), batchSize)
 
 
-
-
-
 def define_model(is_resnet, is_densenet, is_senet):
     if is_resnet:
         original_model = resnet.resnet50(pretrained = True)
@@ -207,6 +236,7 @@ def define_model(is_resnet, is_densenet, is_senet):
         model = net.model(Encoder, num_features=2048, block_channel = [256, 512, 1024, 2048])
 
     return model
+
 
 class AverageMeter(object):
     def __init__(self):
@@ -224,8 +254,10 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+
 def atoi(text):
     return int(text) if text.isdigit() else text
+
 
 def natural_keys(text):
     '''

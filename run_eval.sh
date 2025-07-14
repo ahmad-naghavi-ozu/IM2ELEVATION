@@ -210,7 +210,7 @@ if [[ "$SKIP_PREDICTIONS" == false ]]; then
         print_status "Generating predictions..."
         
         # Build prediction command with GPU options
-        PRED_CMD="python test_with_predictions.py --model \"$MODEL_PATH\" --csv \"$CSV_FILE\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
+        PRED_CMD="python test.py --model \"$MODEL_PATH\" --csv \"$CSV_FILE\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
         if [[ "$SINGLE_GPU" == true ]]; then
             PRED_CMD="$PRED_CMD --single-gpu"
         fi

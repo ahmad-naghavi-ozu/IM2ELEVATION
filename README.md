@@ -90,7 +90,11 @@ python train.py --data output_folder --csv path/to/training.csv --epochs 100
 
 ### Testing
 ```bash
+# Standard model testing
 python test.py --model path/to/model_folder --csv path/to/test.csv --outfile results.txt
+
+# Enhanced testing with prediction saving for evaluation
+python test.py --model path/to/model_folder --csv path/to/test.csv --save-predictions
 ```
 
 ## 📥 Downloads
