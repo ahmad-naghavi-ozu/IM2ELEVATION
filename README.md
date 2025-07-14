@@ -153,7 +153,25 @@ IM2ELEVATION/
     └── pdf_processor/    # Document processing tools
 ```
 
-## 🔧 System Requirements
+## � Documentation
+
+### Technical Documentation
+- **[Evaluation Pipeline](documents/technical/evaluation.md)** - Comprehensive guide to the evaluation system and metrics
+- **[Scripts Documentation](documents/technical/scripts.md)** - Shell scripts usage and features
+
+### Troubleshooting & Fixes
+- **[GPU Issues & Solutions](documents/troubleshooting/gpu-issues.md)** - Complete guide to GPU-related problems and fixes
+- **[GPU Fixes Summary](documents/troubleshooting/gpu-fixes-summary.md)** - Quick summary of recent GPU utilization improvements
+
+### Research Papers
+- **[Original Paper](documents/IM2ELEVATION_paper.md)** - Markdown version of the research paper
+- **[Paper PDF](documents/IM2ELEVATION%20-%20Building%20Height%20Estimation%20from%20Single-View%20Aerial%20Imagery.pdf)** - Full research paper
+
+### Tool-Specific Guides
+- **[Environment Setup](tools/environment_setup/README.md)** - Complete environment installation guide
+- **[Git Setup](tools/git_setup/README.md)** - Git configuration for the project
+
+## �🔧 System Requirements
 
 - **OS**: Linux (tested on Ubuntu)
 - **Memory**: 16GB+ RAM recommended
