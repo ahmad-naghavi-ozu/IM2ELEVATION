@@ -14,17 +14,19 @@ OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
+SKIP_EVALUATION=false
 GPU_IDS="0,1"
 SINGLE_GPU=false
 BATCH_SIZE=2 # Default batch size per GPU for training, total batch size for testing
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
+FORCE_REGENERATE_PREDICTIONS=false
 
 # Help function
 show_help() {
     cat << EOF
 IM2ELEVATION Full Pipeline Script
 
-This script runs the complete pipeline: CSV generation → Training → Testing
+This script runs the complete pipeline: CSV generation → Training → Testing → Evaluation
 
 Usage: $0 [OPTIONS]
 
@@ -37,24 +39,32 @@ Options:
     --skip-csv                  Skip CSV generation (use existing CSV files)
     --skip-training             Skip training (use existing models for testing)
     --skip-testing              Skip testing (only generate CSV and train)
+    --skip-evaluation           Skip evaluation (only generate CSV, train, and test)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
     --single-gpu                Use single GPU for training/testing
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
+    --force-regenerate          Force regenerate predictions during evaluation
     -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 2)
     -h, --help                  Show this help message
 
 Examples:
-    # Full pipeline
+    # Full pipeline with evaluation
     $0 --dataset DFC2023Amini --dataset-path /path/to/DFC2023Amini --epochs 50
 
     # Skip CSV generation and use existing files
     $0 --dataset contest --skip-csv --epochs 100
 
     # Only generate CSV files
-    $0 --dataset mydata --dataset-path /path/to/mydata --skip-training --skip-testing
+    $0 --dataset mydata --dataset-path /path/to/mydata --skip-training --skip-testing --skip-evaluation
 
-    # Only test existing models
+    # Only test and evaluate existing models
     $0 --dataset DFC2023Amini --skip-csv --skip-training
+
+    # Skip evaluation step
+    $0 --dataset DFC2023S --skip-evaluation
+
+    # Force regenerate predictions during evaluation
+    $0 --dataset DFC2023S --force-regenerate
 EOF
 }
 
@@ -93,6 +103,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_TESTING=true
             shift
             ;;
+        --skip-evaluation)
+            SKIP_EVALUATION=true
+            shift
+            ;;
         --gpu-ids)
             GPU_IDS="$2"
             shift 2
@@ -103,6 +117,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-resume)
             AUTO_RESUME=false
+            shift
+            ;;
+        --force-regenerate)
+            FORCE_REGENERATE_PREDICTIONS=true
             shift
             ;;
         -b|--batch-size)
@@ -166,6 +184,7 @@ echo "Pipeline Steps:"
 echo "  CSV Generation: $([ "$SKIP_CSV_GENERATION" == true ] && echo "SKIP" || echo "RUN")"
 echo "  Training:       $([ "$SKIP_TRAINING" == true ] && echo "SKIP" || echo "RUN")"
 echo "  Testing:        $([ "$SKIP_TESTING" == true ] && echo "SKIP" || echo "RUN")"
+echo "  Evaluation:     $([ "$SKIP_EVALUATION" == true ] && echo "SKIP" || echo "RUN")"
 echo "=============================================="
 echo ""
 
@@ -192,9 +211,11 @@ fi
     echo "  Skip CSV: $SKIP_CSV_GENERATION"
     echo "  Skip Training: $SKIP_TRAINING"
     echo "  Skip Testing: $SKIP_TESTING"
+    echo "  Skip Evaluation: $SKIP_EVALUATION"
     echo "  GPU IDs: $GPU_IDS"
     echo "  Single GPU: $SINGLE_GPU"
     echo "  Batch Size: $BATCH_SIZE"
+    echo "  Force Regenerate Predictions: $FORCE_REGENERATE_PREDICTIONS"
     echo ""
 } > "$PIPELINE_LOG"
 
@@ -430,6 +451,107 @@ else
     } >> "$PIPELINE_LOG"
 fi
 
+# Step 4: Evaluation
+if [[ "$SKIP_EVALUATION" == false ]]; then
+    echo "=========================================="
+    echo "Step 4: Running evaluation"
+    echo "=========================================="
+    
+    TEST_CSV="./dataset/test_${DATASET_NAME}.csv"
+    if [[ ! -f "$TEST_CSV" ]]; then
+        echo "Error: Test CSV not found: $TEST_CSV"
+        exit 1
+    fi
+    
+    # Use dataset-specific output directory for evaluation
+    DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
+    
+    # Check for model files
+    MODEL_FILES=($(find "$DATASET_OUTPUT_DIR" -name "*.tar" 2>/dev/null | sort))
+    if [[ ${#MODEL_FILES[@]} -eq 0 ]]; then
+        echo "Error: No model checkpoint files found in $DATASET_OUTPUT_DIR"
+        exit 1
+    fi
+    
+    # Build evaluation command
+    EVAL_CMD="python test_with_predictions.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions"
+    if [[ "$SINGLE_GPU" == true ]]; then
+        EVAL_CMD="$EVAL_CMD --single-gpu --gpu-ids $(echo "$GPU_IDS" | cut -d',' -f1)"
+    else
+        EVAL_CMD="$EVAL_CMD --gpu-ids $GPU_IDS"
+    fi
+    
+    echo "Command: $EVAL_CMD"
+    echo ""
+    
+    {
+        echo "Step 4: Evaluation"
+        echo "=================="
+        echo "Command: $EVAL_CMD"
+        echo "Start: $(date)"
+        echo ""
+    } >> "$PIPELINE_LOG"
+    
+    # Step 4a: Generate predictions (if not already exist or if forced)
+    PREDICTIONS_DIR="${DATASET_OUTPUT_DIR}/predictions"
+    if [[ "$FORCE_REGENERATE_PREDICTIONS" == true ]] || [[ ! -d "$PREDICTIONS_DIR" ]] || [[ -z "$(ls -A $PREDICTIONS_DIR 2>/dev/null)" ]]; then
+        if [[ "$FORCE_REGENERATE_PREDICTIONS" == true ]] && [[ -d "$PREDICTIONS_DIR" ]]; then
+            echo "Force regenerating predictions, removing existing directory..."
+            rm -rf "$PREDICTIONS_DIR"
+        fi
+        
+        echo "Generating predictions for evaluation..."
+        eval "$EVAL_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
+        
+        if [[ $? -ne 0 ]]; then
+            echo "ERROR: Prediction generation failed!"
+            exit 1
+        fi
+        echo "Prediction generation completed!"
+    else
+        echo "Predictions directory already exists and contains files"
+        echo "Skipping prediction generation. Use --force-regenerate to overwrite"
+    fi
+    
+    # Step 4b: Run evaluation metrics
+    echo "Running evaluation metrics..."
+    METRICS_CMD="python evaluate.py --predictions-dir \"$PREDICTIONS_DIR\" --csv-file \"$TEST_CSV\" --dataset-name \"$DATASET_NAME\" --output-dir \"$DATASET_OUTPUT_DIR\""
+    echo "Command: $METRICS_CMD"
+    
+    eval "$METRICS_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
+    
+    if [[ $? -ne 0 ]]; then
+        echo "ERROR: Evaluation metrics failed!"
+        exit 1
+    fi
+    
+    # Count prediction files
+    PRED_COUNT=$(find "$PREDICTIONS_DIR" -name "*_pred.npy" 2>/dev/null | wc -l)
+    
+    {
+        echo ""
+        echo "Evaluation completed: $(date)"
+        echo "Total prediction files: $PRED_COUNT"
+        echo ""
+    } >> "$PIPELINE_LOG"
+    
+    echo "Evaluation completed!"
+    echo "Total prediction files: $PRED_COUNT"
+    echo "Results saved to: $DATASET_OUTPUT_DIR"
+    echo ""
+else
+    echo "=========================================="
+    echo "Step 4: Skipping evaluation"
+    echo "=========================================="
+    echo ""
+    
+    {
+        echo "Step 4: Evaluation - SKIPPED"
+        echo "============================"
+        echo ""
+    } >> "$PIPELINE_LOG"
+fi
+
 # Pipeline completion
 {
     echo "Pipeline completed: $(date)"
@@ -453,6 +575,31 @@ if [[ "$SKIP_TESTING" == false ]]; then
         grep "Model Loss" "$LATEST_RESULTS" | tail -1 2>/dev/null || echo "Results saved to file"
     else
         echo "No test results found"
+    fi
+fi
+
+if [[ "$SKIP_EVALUATION" == false ]]; then
+    echo ""
+    echo "Evaluation Results Summary:"
+    echo "=========================="
+    # Show the most recent evaluation results
+    LATEST_EVAL_RESULTS=$(find "$OUTPUT_DIR" -name "evaluation_results_*.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
+    if [[ -n "$LATEST_EVAL_RESULTS" ]]; then
+        echo "Latest evaluation results from: $(basename "$LATEST_EVAL_RESULTS")"
+        # Show key metrics
+        echo ""
+        echo "=== QUICK SUMMARY ==="
+        grep -E "(RMSE|MAE|δ[₁₂₃])" "$LATEST_EVAL_RESULTS" 2>/dev/null | head -7 || echo "Evaluation results saved to file"
+    else
+        echo "No evaluation results found"
+    fi
+    
+    # Show prediction count
+    DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
+    PREDICTIONS_DIR="${DATASET_OUTPUT_DIR}/predictions"
+    if [[ -d "$PREDICTIONS_DIR" ]]; then
+        PRED_COUNT=$(find "$PREDICTIONS_DIR" -name "*_pred.npy" 2>/dev/null | wc -l)
+        echo "Total prediction files generated: $PRED_COUNT"
     fi
 fi
 echo "=============================================="
