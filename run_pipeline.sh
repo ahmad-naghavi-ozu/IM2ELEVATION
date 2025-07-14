@@ -6,9 +6,9 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="Dublin"
-DATASET_PATH="/home/asfand/Ahmad/datasets/Dublin"
-EPOCHS=85
+DATASET_NAME="DFC2023Amini"
+DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2023Amini"
+EPOCHS=50
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
