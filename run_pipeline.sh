@@ -6,8 +6,8 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="DFC2023Amini"
-DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2023Amini"
+DATASET_NAME="Huawei_Contest"
+DATASET_PATH="/home/asfand/Ahmad/datasets/Huawei_Contest"
 EPOCHS=50
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
@@ -15,7 +15,7 @@ SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
 SKIP_EVALUATION=false
-GPU_IDS="0,1"
+GPU_IDS="1,2"
 BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 FORCE_REGENERATE_PREDICTIONS=false

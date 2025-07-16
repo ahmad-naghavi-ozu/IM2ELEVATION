@@ -25,7 +25,7 @@ from pathlib import Path
 
 def get_matching_files(rgb_dir, dsm_dir, rgb_patterns=None, dsm_patterns=None):
     """
-    Find matching RGB and DSM files based on filename.
+    Find matching RGB and DSM files based on identical base filenames.
     
     Args:
         rgb_dir: Path to RGB images directory
@@ -47,65 +47,48 @@ def get_matching_files(rgb_dir, dsm_dir, rgb_patterns=None, dsm_patterns=None):
         rgb_files.extend(glob.glob(os.path.join(rgb_dir, pattern)))
     rgb_files.sort()
     
-    matched_pairs = []
-    
-    for rgb_path in rgb_files:
-        rgb_filename = os.path.basename(rgb_path)
-        
-        # Extract base name (remove extension and any prefixes like RGB_)
-        base_name = rgb_filename
-        if rgb_filename.startswith('RGB_'):
-            base_name = rgb_filename[4:]  # Remove 'RGB_' prefix
-        
-        # Remove extension
-        base_name = os.path.splitext(base_name)[0]
-        
-        # Look for corresponding DSM file with multiple possible extensions
-        dsm_extensions = ['.tif', '.png', '.jpg', '.jpeg']
-        possible_dsm_names = []
-        
-        for ext in dsm_extensions:
-            possible_dsm_names.extend([
-                f"DSM_{base_name}{ext}",
-                f"{base_name}{ext}",
-                f"dsm_{base_name}{ext}",
-                os.path.splitext(rgb_filename)[0].replace('RGB', 'DSM') + ext,
-                os.path.splitext(rgb_filename)[0].replace('rgb', 'dsm') + ext
-            ])
-        
-        dsm_path = None
-        for dsm_name in possible_dsm_names:
-            potential_path = os.path.join(dsm_dir, dsm_name)
-            if os.path.exists(potential_path):
-                dsm_path = potential_path
-                break
-        
-        if dsm_path:
-            matched_pairs.append((rgb_path, dsm_path))
-        else:
-            print(f"Warning: No matching DSM file found for {rgb_filename}")
-    
-    # Check for DSM files without RGB matches - support multiple extensions
+    # Get all DSM files with supported extensions
     dsm_files = []
     for pattern in dsm_patterns:
         dsm_files.extend(glob.glob(os.path.join(dsm_dir, pattern)))
+    dsm_files.sort()
     
-    dsm_basenames = set()
-    for dsm_file in dsm_files:
-        dsm_filename = os.path.basename(dsm_file)
-        dsm_basenames.add(os.path.splitext(dsm_filename)[0])
-    
-    rgb_basenames = set()
-    for rgb_path, _ in matched_pairs:
+    # Create dictionaries mapping base names to file paths
+    rgb_base_to_path = {}
+    for rgb_path in rgb_files:
         rgb_filename = os.path.basename(rgb_path)
-        base_name = rgb_filename
-        if rgb_filename.startswith('RGB_'):
-            base_name = rgb_filename[4:]
-        rgb_basenames.add(os.path.splitext(base_name)[0])
+        base_name = os.path.splitext(rgb_filename)[0]  # Simple: just remove extension
+        rgb_base_to_path[base_name] = rgb_path
     
-    unmatched_dsm = dsm_basenames - {os.path.splitext(os.path.basename(pair[1]))[0] for pair in matched_pairs}
+    dsm_base_to_path = {}
+    for dsm_path in dsm_files:
+        dsm_filename = os.path.basename(dsm_path)
+        base_name = os.path.splitext(dsm_filename)[0]  # Simple: just remove extension
+        dsm_base_to_path[base_name] = dsm_path
+    
+    # Find matching pairs based on identical base names
+    matched_pairs = []
+    unmatched_rgb = []
+    
+    for base_name, rgb_path in rgb_base_to_path.items():
+        if base_name in dsm_base_to_path:
+            dsm_path = dsm_base_to_path[base_name]
+            matched_pairs.append((rgb_path, dsm_path))
+        else:
+            unmatched_rgb.append(os.path.basename(rgb_path))
+    
+    # Report unmatched files
+    if unmatched_rgb:
+        print(f"Warning: Found {len(unmatched_rgb)} RGB files without matching DSM files")
+        if len(unmatched_rgb) <= 5:  # Show a few examples
+            print(f"Examples: {unmatched_rgb}")
+    
+    unmatched_dsm = set(dsm_base_to_path.keys()) - set(rgb_base_to_path.keys())
     if unmatched_dsm:
-        print(f"Warning: Found {len(unmatched_dsm)} DSM files without RGB matches")
+        print(f"Warning: Found {len(unmatched_dsm)} DSM files without matching RGB files")
+        if len(unmatched_dsm) <= 5:  # Show a few examples
+            dsm_examples = [f"{name}{os.path.splitext(dsm_base_to_path[name])[1]}" for name in list(unmatched_dsm)[:5]]
+            print(f"Examples: {dsm_examples}")
     
     return matched_pairs
 
