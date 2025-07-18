@@ -165,11 +165,26 @@ class HeightRegressionMetrics(object):
                     
                     # Construct SEM path based on DSM path
                     sem_path = dsm_path.replace('/dsm/', '/sem/')
-                    # Handle different file extensions for semantic segmentation
+                    
+                    # Intelligently determine SEM file extension by checking what exists
+                    sem_base = sem_path
                     if sem_path.endswith('.tiff'):
-                        sem_path = sem_path.replace('.tiff', '.png')
+                        sem_base = sem_path.replace('.tiff', '')
                     elif sem_path.endswith('.tif'):
-                        sem_path = sem_path.replace('.tif', '.png')
+                        sem_base = sem_path.replace('.tif', '')
+                    
+                    # Try different extensions to find the actual SEM file
+                    possible_extensions = ['.tif', '.tiff', '.png', '.jpg', '.jpeg']
+                    sem_path = None
+                    for ext in possible_extensions:
+                        test_path = sem_base + ext
+                        if os.path.exists(test_path):
+                            sem_path = test_path
+                            break
+                    
+                    # If no SEM file found, skip this sample
+                    if sem_path is None:
+                        continue
                     
                     gt_files.append({
                         'rgb_path': rgb_path,
