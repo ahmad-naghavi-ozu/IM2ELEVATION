@@ -472,6 +472,7 @@ else
 fi
 
 # Step 4: Evaluation
+EVALUATION_SUCCESS=false
 if [[ "$SKIP_EVALUATION" == false ]]; then
     echo "=========================================="
     echo "Step 4: Running evaluation"
@@ -517,6 +518,7 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     
     # Step 4a: Generate predictions (if not already exist or if forced)
     PREDICTIONS_DIR="${DATASET_OUTPUT_DIR}/predictions"
+    PREDICTION_SUCCESS=false
     if [[ "$FORCE_REGENERATE_PREDICTIONS" == true ]] || [[ ! -d "$PREDICTIONS_DIR" ]] || [[ -z "$(ls -A $PREDICTIONS_DIR 2>/dev/null)" ]]; then
         if [[ "$FORCE_REGENERATE_PREDICTIONS" == true ]] && [[ -d "$PREDICTIONS_DIR" ]]; then
             echo "Force regenerating predictions, removing existing directory..."
@@ -526,41 +528,51 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
         echo "Generating predictions for evaluation..."
         eval "$EVAL_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
         
-        if [[ $? -ne 0 ]]; then
+        if [[ $? -eq 0 ]]; then
+            PREDICTION_SUCCESS=true
+            echo "Prediction generation completed!"
+        else
             echo "ERROR: Prediction generation failed!"
             exit 1
         fi
-        echo "Prediction generation completed!"
     else
         echo "Predictions directory already exists and contains files"
         echo "Skipping prediction generation. Use --force-regenerate to overwrite"
+        PREDICTION_SUCCESS=true
     fi
     
     # Step 4b: Run evaluation metrics
-    echo "Running evaluation metrics..."
-    METRICS_CMD="python evaluate.py --predictions-dir \"$PREDICTIONS_DIR\" --csv-file \"$TEST_CSV\" --dataset-name \"$DATASET_NAME\" --output-dir \"$DATASET_OUTPUT_DIR\""
-    echo "Command: $METRICS_CMD"
-    
-    eval "$METRICS_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
-    
-    if [[ $? -ne 0 ]]; then
-        echo "ERROR: Evaluation metrics failed!"
-        exit 1
+    if [[ "$PREDICTION_SUCCESS" == true ]]; then
+        echo "Running evaluation metrics..."
+        METRICS_CMD="python evaluate.py --predictions-dir \"$PREDICTIONS_DIR\" --csv-file \"$TEST_CSV\" --dataset-name \"$DATASET_NAME\" --output-dir \"$DATASET_OUTPUT_DIR\""
+        echo "Command: $METRICS_CMD"
+        
+        eval "$METRICS_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
+        
+        if [[ $? -eq 0 ]]; then
+            EVALUATION_SUCCESS=true
+            # Count prediction files
+            PRED_COUNT=$(find "$PREDICTIONS_DIR" -name "*_pred.npy" 2>/dev/null | wc -l)
+            
+            {
+                echo ""
+                echo "Evaluation completed: $(date)"
+                echo "Total prediction files: $PRED_COUNT"
+                echo ""
+            } >> "$PIPELINE_LOG"
+            
+            echo "Evaluation completed!"
+            echo "Total prediction files: $PRED_COUNT"
+            echo "Results saved to: $DATASET_OUTPUT_DIR"
+        else
+            echo "ERROR: Evaluation metrics failed!"
+            {
+                echo ""
+                echo "Evaluation failed: $(date)"
+                echo ""
+            } >> "$PIPELINE_LOG"
+        fi
     fi
-    
-    # Count prediction files
-    PRED_COUNT=$(find "$PREDICTIONS_DIR" -name "*_pred.npy" 2>/dev/null | wc -l)
-    
-    {
-        echo ""
-        echo "Evaluation completed: $(date)"
-        echo "Total prediction files: $PRED_COUNT"
-        echo ""
-    } >> "$PIPELINE_LOG"
-    
-    echo "Evaluation completed!"
-    echo "Total prediction files: $PRED_COUNT"
-    echo "Results saved to: $DATASET_OUTPUT_DIR"
     echo ""
 else
     echo "=========================================="
@@ -605,24 +617,30 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     echo ""
     echo "Evaluation Results Summary:"
     echo "=========================="
-    # Show the most recent evaluation results
-    LATEST_EVAL_RESULTS=$(find "$OUTPUT_DIR" -name "evaluation_results_*.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
-    if [[ -n "$LATEST_EVAL_RESULTS" ]]; then
-        echo "Latest evaluation results from: $(basename "$LATEST_EVAL_RESULTS")"
-        # Show key metrics
-        echo ""
-        echo "=== QUICK SUMMARY ==="
-        grep -E "(RMSE|MAE|δ[₁₂₃])" "$LATEST_EVAL_RESULTS" 2>/dev/null | head -7 || echo "Evaluation results saved to file"
+    # Only show results if the current evaluation succeeded
+    if [[ "$EVALUATION_SUCCESS" == true ]]; then
+        # Show the most recent evaluation results for the current dataset only
+        DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
+        LATEST_EVAL_RESULTS=$(find "$DATASET_OUTPUT_DIR" -name "evaluation_results_*.txt" -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
+        if [[ -n "$LATEST_EVAL_RESULTS" ]]; then
+            echo "Latest evaluation results from: $(basename "$LATEST_EVAL_RESULTS")"
+            # Show key metrics
+            echo ""
+            echo "=== QUICK SUMMARY ==="
+            grep -E "(RMSE|MAE|δ[₁₂₃])" "$LATEST_EVAL_RESULTS" 2>/dev/null | head -7 || echo "Evaluation results saved to file"
+        else
+            echo "No evaluation results file found"
+        fi
+        
+        # Show prediction count
+        PREDICTIONS_DIR="${DATASET_OUTPUT_DIR}/predictions"
+        if [[ -d "$PREDICTIONS_DIR" ]]; then
+            PRED_COUNT=$(find "$PREDICTIONS_DIR" -name "*_pred.npy" 2>/dev/null | wc -l)
+            echo "Total prediction files generated: $PRED_COUNT"
+        fi
     else
-        echo "No evaluation results found"
-    fi
-    
-    # Show prediction count
-    DATASET_OUTPUT_DIR="${OUTPUT_DIR}/${DATASET_NAME}"
-    PREDICTIONS_DIR="${DATASET_OUTPUT_DIR}/predictions"
-    if [[ -d "$PREDICTIONS_DIR" ]]; then
-        PRED_COUNT=$(find "$PREDICTIONS_DIR" -name "*_pred.npy" 2>/dev/null | wc -l)
-        echo "Total prediction files generated: $PRED_COUNT"
+        echo "Evaluation failed for dataset: $DATASET_NAME"
+        echo "Check the pipeline log for details: $PIPELINE_LOG"
     fi
 fi
 echo "=============================================="
