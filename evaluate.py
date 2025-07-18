@@ -165,6 +165,11 @@ class HeightRegressionMetrics(object):
                     
                     # Construct SEM path based on DSM path
                     sem_path = dsm_path.replace('/dsm/', '/sem/')
+                    # Handle different file extensions for semantic segmentation
+                    if sem_path.endswith('.tiff'):
+                        sem_path = sem_path.replace('.tiff', '.png')
+                    elif sem_path.endswith('.tif'):
+                        sem_path = sem_path.replace('.tif', '.png')
                     
                     gt_files.append({
                         'rgb_path': rgb_path,
@@ -178,8 +183,9 @@ class HeightRegressionMetrics(object):
         missing_predictions = []
         
         for gt_file in gt_files:
-            # Get image name for prediction file
-            image_name = os.path.basename(gt_file['rgb_path']).replace('.tif', '')
+            # Get image name for prediction file (remove extension to match prediction file naming)
+            image_name = os.path.basename(gt_file['rgb_path'])
+            image_name = os.path.splitext(image_name)[0]
             pred_file = os.path.join(predictions_dir, f"{image_name}_pred.npy")
             
             if not os.path.exists(pred_file):
