@@ -138,7 +138,9 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
         with open(csv_file, 'r') as f:
             for line in f:
                 rgb_path = line.strip().split(',')[0]
-                image_name = os.path.basename(rgb_path).replace('.tif', '')
+                image_name = os.path.basename(rgb_path)
+                # Remove file extension properly (handles .png, .tif, .jpg, etc.)
+                image_name = os.path.splitext(image_name)[0]
                 image_names.append(image_name)
 
     prediction_idx = 0
