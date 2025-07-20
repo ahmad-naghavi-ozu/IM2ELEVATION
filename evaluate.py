@@ -409,11 +409,12 @@ if __name__ == "__main__":
     parser.add_argument('--dataset-name', required=True,
                        help='Name of the dataset')
     parser.add_argument('--output-dir', 
-                       help='Directory to save results (default: same as predictions-dir)')
+                       help='Directory to save results (default: parent of predictions-dir)')
     
     args = parser.parse_args()
     
-    output_dir = args.output_dir or args.predictions_dir
+    # Default to parent directory of predictions-dir instead of predictions-dir itself
+    output_dir = args.output_dir or os.path.dirname(args.predictions_dir)
     
     print(f"Evaluating predictions from: {args.predictions_dir}")
     print(f"Using ground truth from: {args.csv_file}")
