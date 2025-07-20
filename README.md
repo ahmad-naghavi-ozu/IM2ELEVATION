@@ -71,6 +71,70 @@ Where:
 - **L_normal**: `|1 - cos(output_normal, depth_normal)|` - Surface normal consistency
 - **L_dx, L_dy**: Gradient losses in x and y directions for edge preservation
 
+## 🔄 Data Normalization Pipeline
+
+### Universal DSM Scaling Strategy
+
+The IM2ELEVATION framework employs a **dataset-agnostic normalization pipeline** that works seamlessly with any DSM scale, whether in meters, feet, or any other unit system.
+
+#### Complete Transformation Chain
+
+```
+Original DSM → [×1000] → [÷100000] → Model Input → Model Output → [×100] → Restored DSM
+     ↓            ↓           ↓           ↓            ↓           ↓
+  Any Units → Precision   Normalize   Train/Test   Raw Output  Original
+             Retention   for Training              Scale      Units
+```
+
+#### Step-by-Step Breakdown:
+
+1. **Data Loading** (`loaddata.py`):
+   ```python
+   depth = cv2.imread(depth_name, -1)
+   depth = (depth * 1000).astype(np.uint16)  # Multiply by 1000 for precision retention
+   ```
+
+2. **Normalization** (`nyu_transform.py`):
+   ```python
+   depth = self.to_tensor(depth) / 100000  # Divide by 100000 for model training
+   ```
+
+3. **Net Transformation Effect**:
+   ```
+   Original_DSM × 1000 ÷ 100000 = Original_DSM ÷ 100
+   ```
+
+4. **Model Training/Testing**:
+   - Model learns to predict in the normalized space (Original_DSM ÷ 100)
+   - All internal computations use this normalized scale
+
+5. **Prediction Restoration** (`test.py`):
+   ```python
+   # Universal restoration formula (works for any dataset)
+   pred_array = output[j, 0].cpu().detach().numpy() * 100
+   ```
+
+#### Universal Formula Benefits:
+
+✅ **Dataset Agnostic**: Works with Dublin (meters), DFC2019 (any unit), DFC2023 (any unit), or custom datasets  
+✅ **No Hardcoding**: No need to specify dataset-specific ranges or units  
+✅ **Automatic Scaling**: Restores predictions to original DSM scale regardless of input units  
+✅ **Consistent Pipeline**: Same approach for training, testing, and evaluation phases  
+
+#### Mathematical Proof:
+```
+If Original_DSM = X units (meters, feet, etc.)
+After normalization: X × 1000 ÷ 100000 = X ÷ 100
+Model predicts: X ÷ 100
+After restoration: (X ÷ 100) × 100 = X units (original scale restored)
+```
+
+#### Why This Works:
+- **Precision Retention**: ×1000 prevents small floating-point DSM values from being rounded to zero when stored as uint16 integers in image files
+- **Training Stability**: ÷100000 creates normalized values suitable for neural network training
+- **Perfect Reversibility**: ×100 exactly reverses the net ÷100 effect
+- **Unit Independence**: Process works identically regardless of original measurement units
+
 ## 🚀 Quick Start
 
 ### Environment Setup
