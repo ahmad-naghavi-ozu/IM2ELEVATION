@@ -18,6 +18,7 @@ import csv
 import re
 import warnings
 from datetime import datetime
+from tqdm import tqdm
 
 # Suppress ALL warnings for clean output
 warnings.filterwarnings("ignore")
@@ -145,6 +146,11 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
 
     prediction_idx = 0
     
+    # Create progress bar
+    total_items = len(image_names) if image_names else len(test_loader.dataset)
+    pbar = tqdm(total=total_items, desc="Processing test items", unit="item", 
+                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
+    
     for i, sample_batched in enumerate(test_loader):
         image, depth = sample_batched['image'], sample_batched['depth']
         depth = depth.to(device, non_blocking=True)
@@ -166,6 +172,12 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
                     pred_path = os.path.join(predictions_dir, pred_filename)
                     np.save(pred_path, pred_array)
                     prediction_idx += 1
+                    # Update progress bar for each saved prediction
+                    pbar.update(1)
+        else:
+            # Update progress bar based on batch size when not saving predictions
+            batchSize = depth.size(0)
+            pbar.update(batchSize)
 
         batchSize = depth.size(0)
         testing_loss(depth, output, losses, batchSize)
@@ -177,6 +189,9 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
         errorSum = util.addErrors(errorSum, errors, batchSize)
         averageError = util.averageErrors(errorSum, totalNumber)
 
+    # Close progress bar
+    pbar.close()
+    
     averageError['RMSE'] = np.sqrt(averageError['MSE'])
     loss = float(losses.avg)
 
