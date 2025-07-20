@@ -97,6 +97,59 @@ python test.py --model path/to/model_folder --csv path/to/test.csv --outfile res
 python test.py --model path/to/model_folder --csv path/to/test.csv --save-predictions
 ```
 
+### Evaluation
+```bash
+# Run comprehensive evaluation on saved predictions
+python evaluate.py --predictions-dir pipeline_output/dataset_name/predictions --csv-file dataset/test_dataset_name.csv --dataset-name dataset_name
+```
+
+## 🔍 Evaluation Methodology
+
+### ⚠️ Important: Test vs Evaluation Phase Differences
+
+**The metrics reported during the test phase (end of each epoch) are NOT the same as the final evaluation results.** For authentic regression evaluation, always use the dedicated evaluation phase.
+
+#### Test Phase (During Training/Testing)
+- **Purpose**: Quick progress monitoring during training/testing
+- **Implementation**: PyTorch tensor-based computation with batch processing
+- **Preprocessing**: Applied in `util.evaluateError()` function
+- **Averaging**: Pixel-weighted averaging across all batches
+- **Metrics**: MSE, RMSE, MAE, SSIM computed per-batch then averaged
+
+#### Evaluation Phase (Final Assessment)
+- **Purpose**: Comprehensive, publication-ready evaluation results
+- **Implementation**: NumPy array-based computation with image-by-image processing
+- **Preprocessing**: Consistent with test phase but applied differently
+- **Averaging**: Image-weighted averaging (each image contributes equally)
+- **Metrics**: Extended metrics including building-type-specific RMSE and delta metrics
+
+#### Key Differences Causing Metric Variations:
+1. **Different Libraries**: PyTorch (test) vs NumPy (evaluation)
+2. **Averaging Methods**: Pixel-weighted vs image-weighted
+3. **Processing Pipeline**: Batch processing vs individual image processing
+4. **Numerical Precision**: Different floating-point handling
+
+#### Recommendation:
+- **Use test phase metrics** for training progress monitoring and model comparison during development
+- **Use evaluation phase metrics** for final results, publications, and authentic model assessment
+
+### Evaluation Metrics Explained
+
+#### Core Regression Metrics
+- **MSE**: Mean Squared Error - Overall prediction accuracy
+- **RMSE**: Root Mean Squared Error - Standard deviation of prediction errors
+- **MAE**: Mean Absolute Error - Average absolute prediction error
+
+#### Building-Type-Specific Metrics
+- **Low-rise RMSE**: Buildings 1-15m height
+- **Mid-rise RMSE**: Buildings 15-40m height  
+- **High-rise RMSE**: Buildings >40m height
+
+#### Delta Metrics (Depth Accuracy)
+- **δ₁**: Percentage of pixels with `max(pred/gt, gt/pred) < 1.25`
+- **δ₂**: Percentage of pixels with `max(pred/gt, gt/pred) < 1.25²`
+- **δ₃**: Percentage of pixels with `max(pred/gt, gt/pred) < 1.25³`
+
 ## 📥 Downloads
 
 ### Pre-trained Weights
