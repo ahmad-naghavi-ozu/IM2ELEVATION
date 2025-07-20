@@ -240,8 +240,19 @@ class HeightRegressionMetrics(object):
                     print(f"Warning: Prediction has unexpected size {pred_dsm.shape}, expected (440, 440) for {image_name}")
                     pred_dsm = cv2.resize(pred_dsm, (440, 440), interpolation=cv2.INTER_LINEAR)
                 
+                # Apply the same preprocessing as in test phase (util.evaluateError)
+                # Note: predictions are already scaled by 100, so no additional scaling needed
+                
+                # Apply masking: set predictions to 0 where ground truth <= 1
+                idx_zero = np.where(gt_dsm <= 1)
+                pred_dsm_processed = pred_dsm.copy()
+                pred_dsm_processed[idx_zero] = 0
+                
+                # Apply clipping: set predictions to 0 where >= 30 (matching test preprocessing)
+                pred_dsm_processed[np.where(pred_dsm_processed >= 30)] = 0
+                
                 # Add batch dimension for compatibility with original metrics
-                pred_dsm_batch = np.expand_dims(pred_dsm, axis=0)
+                pred_dsm_batch = np.expand_dims(pred_dsm_processed, axis=0)
                 gt_dsm_batch = np.expand_dims(gt_dsm, axis=0)
                 
                 # Add batch to metrics (pred_mask is not used in IM2ELEVATION)

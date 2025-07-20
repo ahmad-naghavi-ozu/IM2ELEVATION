@@ -158,7 +158,10 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
             batch_size = output.size(0)
             for j in range(batch_size):
                 if prediction_idx < len(image_names):
-                    pred_array = output[j, 0].cpu().detach().numpy()  # Remove channel dimension
+                    # Convert prediction back to original DSM scale
+                    # Complete transformation: Original_DSM * 1000 / 100000 = Original_DSM / 100
+                    # So to restore: model_output * 100 = Original_DSM
+                    pred_array = output[j, 0].cpu().detach().numpy() * 100  # Restore to original DSM scale
                     pred_filename = f"{image_names[prediction_idx]}_pred.npy"
                     pred_path = os.path.join(predictions_dir, pred_filename)
                     np.save(pred_path, pred_array)
