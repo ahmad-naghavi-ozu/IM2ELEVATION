@@ -15,6 +15,7 @@ SAVE_RESULTS=true
 GPU_IDS="0"
 SINGLE_GPU=false
 BATCH_SIZE=1
+DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline
 
 # Help function
 show_help() {
@@ -32,6 +33,7 @@ Options:
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
     --single-gpu                Use single GPU for testing
     --batch-size NUM            Batch size for testing (default: 1)
+    --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
     --no-save                   Don't save results to file (print to terminal only)
     -h, --help                  Show this help message
 
@@ -81,6 +83,10 @@ while [[ $# -gt 0 ]]; do
         --batch-size)
             BATCH_SIZE="$2"
             shift 2
+            ;;
+        --disable-normalization)
+            DISABLE_NORMALIZATION=true
+            shift
             ;;
         --no-save)
             SAVE_RESULTS=false
@@ -165,6 +171,7 @@ if [[ "$SAVE_RESULTS" == true ]]; then
 else
     echo "Output:         Terminal only"
 fi
+echo "Disable Norm:   $DISABLE_NORMALIZATION"
 echo "======================================"
 
 # Count test samples
@@ -194,6 +201,9 @@ fi
 
 # Build testing command
 TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH --batch-size $BATCH_SIZE"
+if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+    TEST_CMD="$TEST_CMD --disable-normalization"
+fi
 if [[ "$SINGLE_GPU" == true ]]; then
     TEST_CMD="$TEST_CMD --single-gpu"
 else

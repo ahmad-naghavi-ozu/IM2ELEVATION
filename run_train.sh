@@ -17,6 +17,7 @@ GPU_IDS="0,1,2,3"
 SINGLE_GPU=false
 BATCH_SIZE=2
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
+DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline
 
 # Help function
 show_help() {
@@ -37,6 +38,7 @@ Options:
     --single-gpu                Use single GPU for training
     -b, --batch-size NUM        Batch size per GPU for training (default: 2)
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
+    --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model training
     -h, --help                  Show this help message
 
 Examples:
@@ -102,6 +104,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-resume)
             AUTO_RESUME=false
+            shift
+            ;;
+        --disable-normalization)
+            DISABLE_NORMALIZATION=true
             shift
             ;;
         -h|--help)
@@ -183,6 +189,7 @@ else
 fi
 echo "Resume Epoch:   $RESUME_EPOCH"
 echo "Auto Resume:    $AUTO_RESUME"
+echo "Disable Norm:   $DISABLE_NORMALIZATION"
 if [[ $RESUME_EPOCH -gt 0 ]]; then
     echo "Resume Model:   $RESUME_MODEL"
 fi
@@ -212,6 +219,11 @@ TRAIN_CMD="$TRAIN_CMD --start_epoch $RESUME_EPOCH"
 
 if [[ $RESUME_EPOCH -gt 0 ]]; then
     TRAIN_CMD="$TRAIN_CMD --model $RESUME_MODEL"
+fi
+
+# Add normalization flag
+if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+    TRAIN_CMD="$TRAIN_CMD --disable-normalization"
 fi
 
 # Add GPU options

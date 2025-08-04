@@ -13,6 +13,7 @@ SINGLE_GPU=false
 BATCH_SIZE=1
 SKIP_PREDICTIONS=false
 FORCE_REGENERATE=false
+DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline
 
 # Colors for output
 RED='\033[0;31m'
@@ -55,6 +56,7 @@ Options:
     -b, --batch-size NUM        Batch size for prediction generation (default: 3)
     --skip-predictions          Skip prediction generation (use existing predictions)
     --force-regenerate          Force regenerate predictions even if they exist
+    --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
     -h, --help                  Show this help message
 
 Available datasets:
@@ -113,6 +115,10 @@ while [[ $# -gt 0 ]]; do
             FORCE_REGENERATE=true
             shift
             ;;
+        --disable-normalization)
+            DISABLE_NORMALIZATION=true
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -168,6 +174,7 @@ print_status ""
 print_status "Pipeline Steps:"
 print_status "  Generate Predictions: $([ "$SKIP_PREDICTIONS" == true ] && echo "SKIP" || echo "RUN")"
 print_status "  Force Regenerate:     $([ "$FORCE_REGENERATE" == true ] && echo "YES" || echo "NO")"
+print_status "  Disable Normalization: $([ "$DISABLE_NORMALIZATION" == true ] && echo "YES" || echo "NO")"
 print_status "  Evaluate Metrics:     RUN"
 print_status "=============================================="
 print_status ""
@@ -211,6 +218,9 @@ if [[ "$SKIP_PREDICTIONS" == false ]]; then
         
         # Build prediction command with GPU options
         PRED_CMD="python test.py --model \"$MODEL_PATH\" --csv \"$CSV_FILE\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
+        if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+            PRED_CMD="$PRED_CMD --disable-normalization"
+        fi
         if [[ "$SINGLE_GPU" == true ]]; then
             PRED_CMD="$PRED_CMD --single-gpu"
         fi
