@@ -43,6 +43,8 @@ parser.add_argument('--batch-size', default=2, type=int,
 parser.add_argument('--data', default='adjust')
 parser.add_argument('--csv', default='')
 parser.add_argument('--model', default='')
+parser.add_argument('--disable-normalization', action='store_true', default=False,
+                    help='disable entire normalization pipeline (x1000, /100000, x100) for raw model training (default: False)')
 
 args = parser.parse_args()
 # Extract dataset name from path for model naming
@@ -124,7 +126,7 @@ def main():
     #optimizer = torch.optim.SGD(model.parameters(), args.lr, weight_decay=args.weight_decay)
     optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
 
-    train_loader = loaddata.getTrainingData(batch_size, args.csv, dataset_name)
+    train_loader = loaddata.getTrainingData(batch_size, args.csv, dataset_name, args.disable_normalization)
 
     logfolder = "runs/"+args.data 
     print(f"Training dataset: {os.path.basename(args.data)}")

@@ -277,8 +277,9 @@ class ToTensor(object):
     Converts a PIL.Image or numpy.ndarray (H x W x C) in the range
     [0, 255] to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0].
     """
-    def __init__(self,is_train=True):
+    def __init__(self, is_train=True, disable_normalization=False):
         self.is_train = is_train
+        self.disable_normalization = disable_normalization
 
     def __call__(self, sample):
         image, depth = sample['image'], sample['depth']
@@ -290,7 +291,13 @@ class ToTensor(object):
         """
 
         image = self.to_tensor(image)/255
-        depth = self.to_tensor(depth)/100000
+        
+        # Apply optional depth normalization (÷100,000)
+        if not self.disable_normalization:
+            depth = self.to_tensor(depth)/100000
+        else:
+            # Skip normalization - keep depth values in original range
+            depth = self.to_tensor(depth)
 
         
         
@@ -306,12 +313,16 @@ class ToTensor(object):
             img = torch.from_numpy(np.asarray(pic, dtype=np.int32))
         elif pic.mode == 'I;16':
             img = torch.from_numpy(np.asarray(pic, dtype=np.int16))
+        elif pic.mode == 'F':
+            img = torch.from_numpy(np.asarray(pic, dtype=np.float32))
         else:
             img = torch.frombuffer(pic.tobytes(), dtype=torch.uint8)
         # PIL image mode: 1, L, P, I, F, RGB, YCbCr, RGBA, CMYK
         if pic.mode == 'YCbCr':
             nchannel = 3
         elif pic.mode == 'I;16':
+            nchannel = 1
+        elif pic.mode == 'F':
             nchannel = 1
         else:
             nchannel = len(pic.mode)

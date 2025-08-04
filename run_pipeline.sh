@@ -19,6 +19,7 @@ GPU_IDS="1"
 BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 FORCE_REGENERATE_PREDICTIONS=false
+DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline (x1000, /100000, x100)
 
 # Help function
 show_help() {
@@ -42,6 +43,7 @@ Options:
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1)
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     --force-regenerate          Force regenerate predictions during evaluation
+    --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
     -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 1)
     -h, --help                  Show this help message
 
@@ -120,6 +122,10 @@ while [[ $# -gt 0 ]]; do
             FORCE_REGENERATE_PREDICTIONS=true
             shift
             ;;
+        --disable-normalization)
+            DISABLE_NORMALIZATION=true
+            shift
+            ;;
         -b|--batch-size)
             BATCH_SIZE="$2"
             shift 2
@@ -180,6 +186,7 @@ else
 fi
 
 echo "Auto Resume:    $AUTO_RESUME"
+echo "Disable Norm:   $DISABLE_NORMALIZATION"
 echo ""
 
 # Check GPU memory status before starting (if utility available)
@@ -230,6 +237,7 @@ fi
     echo "  GPU IDs: $GPU_IDS"
     echo "  Batch Size: $BATCH_SIZE"
     echo "  Force Regenerate Predictions: $FORCE_REGENERATE_PREDICTIONS"
+    echo "  Disable Normalization: $DISABLE_NORMALIZATION"
     echo ""
 } > "$PIPELINE_LOG"
 
@@ -415,6 +423,9 @@ if [[ "$SKIP_TESTING" == false ]]; then
     
     # Build testing command with GPU options and memory management
     TEST_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
+    if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+        TEST_CMD="$TEST_CMD --disable-normalization"
+    fi
     
     echo "Command: $TEST_CMD"
     echo "Found ${#MODEL_FILES[@]} model checkpoints to test"
@@ -504,6 +515,9 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     
     # Build evaluation command with memory management
     EVAL_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
+    if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+        EVAL_CMD="$EVAL_CMD --disable-normalization"
+    fi
     
     echo "Command: $EVAL_CMD"
     echo ""
