@@ -76,7 +76,7 @@ def define_model(is_resnet, is_densenet, is_senet, device_id=0):
 def main():
     
     global args
-    args = parser.parse_args()
+    # args already parsed at module level, just reference the global variable
     
     # Configure GPU usage
     device_ids = [int(x.strip()) for x in args.gpu_ids.split(',')]
@@ -257,8 +257,6 @@ def train(train_loader, model, optimizer, epoch, writer):
 
     cos = nn.CosineSimilarity(dim=1, eps=0)
     get_gradient = sobel.Sobel().cuda()
-    global args
-    args = parser.parse_args()
 
     end = time.time()
     for i, sample_batched in enumerate(train_loader):

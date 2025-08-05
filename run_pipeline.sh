@@ -6,20 +6,20 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="Huawei_Contest"
-DATASET_PATH="/home/asfand/Ahmad/datasets/Huawei_Contest"
-EPOCHS=100
+DATASET_NAME="DFC2019_crp512_bin"
+DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2019_crp512_bin"
+EPOCHS=50
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
 SKIP_EVALUATION=false
-GPU_IDS="1"
+GPU_IDS="0"
 BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 FORCE_REGENERATE_PREDICTIONS=false
-DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline (x1000, /100000, x100)
+DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline (x1000, /100000, x100)
 
 # Help function
 show_help() {
@@ -334,6 +334,11 @@ except:
     
     # Build training command with GPU options and memory management
     TRAIN_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS $RESUME_ARGS"
+    
+    # Add normalization flag if enabled
+    if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+        TRAIN_CMD="$TRAIN_CMD --disable-normalization"
+    fi
     
     echo "Command: $TRAIN_CMD"
     echo ""

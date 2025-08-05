@@ -15,7 +15,7 @@ SAVE_RESULTS=true
 GPU_IDS="0"
 SINGLE_GPU=false
 BATCH_SIZE=1
-DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline
+DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline
 
 # Help function
 show_help() {
