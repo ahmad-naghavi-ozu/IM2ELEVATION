@@ -13,7 +13,7 @@ SINGLE_GPU=false
 BATCH_SIZE=1
 SKIP_PREDICTIONS=false
 FORCE_REGENERATE=false
-DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline
+DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline
 
 # Colors for output
 RED='\033[0;31m'
