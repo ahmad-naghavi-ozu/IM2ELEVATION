@@ -6,14 +6,13 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="Dublin"
+DATASET_NAME="DFC2019_crp512_bin"
 MODEL_BASE_DIR="pipeline_output"
 MODEL_DIR=""
 CSV_PATH=""
 OUTPUT_FILE=""
 SAVE_RESULTS=true
-GPU_IDS="0"
-SINGLE_GPU=false
+GPU_IDS="1"
 BATCH_SIZE=1
 DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline
 
@@ -31,7 +30,6 @@ Options:
     -c, --csv PATH              Path to test CSV file (auto-detected if not specified)
     -o, --output FILE           Output file for results (auto-generated if not specified)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
-    --single-gpu                Use single GPU for testing
     --batch-size NUM            Batch size for testing (default: 1)
     --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
     --no-save                   Don't save results to file (print to terminal only)
@@ -75,10 +73,6 @@ while [[ $# -gt 0 ]]; do
         --gpu-ids)
             GPU_IDS="$2"
             shift 2
-            ;;
-        --single-gpu)
-            SINGLE_GPU=true
-            shift
             ;;
         --batch-size)
             BATCH_SIZE="$2"
@@ -161,11 +155,7 @@ echo "Model Dir:      $MODEL_DIR"
 echo "Test CSV:       $CSV_PATH"
 echo "Model Files:    ${#MODEL_FILES[@]} checkpoints found"
 echo "Batch Size:     $BATCH_SIZE"
-if [[ "$SINGLE_GPU" == true ]]; then
-    echo "GPU Mode:       Single GPU (GPU 0)"
-else
-    echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
-fi
+echo "GPU Mode:       [$GPU_IDS]"
 if [[ "$SAVE_RESULTS" == true ]]; then
     echo "Output File:    $OUTPUT_FILE"
 else
@@ -200,14 +190,9 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 # Build testing command
-TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH --batch-size $BATCH_SIZE"
+TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
 if [[ "$DISABLE_NORMALIZATION" == true ]]; then
     TEST_CMD="$TEST_CMD --disable-normalization"
-fi
-if [[ "$SINGLE_GPU" == true ]]; then
-    TEST_CMD="$TEST_CMD --single-gpu"
-else
-    TEST_CMD="$TEST_CMD --gpu-ids $GPU_IDS"
 fi
 
 # Start testing
