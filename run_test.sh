@@ -13,7 +13,6 @@ CSV_PATH=""
 OUTPUT_FILE=""
 SAVE_RESULTS=true
 GPU_IDS="0"
-SINGLE_GPU=false
 BATCH_SIZE=1
 
 # Help function
@@ -30,7 +29,6 @@ Options:
     -c, --csv PATH              Path to test CSV file (auto-detected if not specified)
     -o, --output FILE           Output file for results (auto-generated if not specified)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
-    --single-gpu                Use single GPU for testing
     --batch-size NUM            Batch size for testing (default: 1)
     --no-save                   Don't save results to file (print to terminal only)
     -h, --help                  Show this help message
@@ -73,10 +71,6 @@ while [[ $# -gt 0 ]]; do
         --gpu-ids)
             GPU_IDS="$2"
             shift 2
-            ;;
-        --single-gpu)
-            SINGLE_GPU=true
-            shift
             ;;
         --batch-size)
             BATCH_SIZE="$2"
@@ -155,11 +149,15 @@ echo "Model Dir:      $MODEL_DIR"
 echo "Test CSV:       $CSV_PATH"
 echo "Model Files:    ${#MODEL_FILES[@]} checkpoints found"
 echo "Batch Size:     $BATCH_SIZE"
-if [[ "$SINGLE_GPU" == true ]]; then
-    echo "GPU Mode:       Single GPU (GPU 0)"
+
+# Determine GPU mode based on number of GPUs
+GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+if [[ $GPU_COUNT -eq 1 ]]; then
+    echo "GPU Mode:       Single GPU (GPU $GPU_IDS)"
 else
     echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
 fi
+
 if [[ "$SAVE_RESULTS" == true ]]; then
     echo "Output File:    $OUTPUT_FILE"
 else
@@ -194,7 +192,10 @@ fi
 
 # Build testing command
 TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH --batch-size $BATCH_SIZE"
-if [[ "$SINGLE_GPU" == true ]]; then
+
+# Add GPU options
+GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+if [[ $GPU_COUNT -eq 1 ]]; then
     TEST_CMD="$TEST_CMD --single-gpu"
 else
     TEST_CMD="$TEST_CMD --gpu-ids $GPU_IDS"

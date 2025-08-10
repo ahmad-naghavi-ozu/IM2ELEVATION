@@ -14,7 +14,6 @@ CSV_PATH=""
 RESUME_EPOCH=0
 RESUME_MODEL=""
 GPU_IDS="0,1,2,3"
-SINGLE_GPU=false
 BATCH_SIZE=2
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 
@@ -34,7 +33,6 @@ Options:
     -r, --resume EPOCH          Resume training from epoch (default: 0)
     -m, --model PATH            Path to model file for resuming (required if --resume > 0)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
-    --single-gpu                Use single GPU for training
     -b, --batch-size NUM        Batch size per GPU for training (default: 2)
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     -h, --help                  Show this help message
@@ -47,7 +45,7 @@ Examples:
     $0 --dataset DFC2023Amini --epochs 50 --gpu-ids "0,1"
 
     # Single GPU training
-    $0 --dataset DFC2023Amini --epochs 50 --single-gpu
+    $0 --dataset DFC2023Amini --epochs 50 --gpu-ids "0"
 
     # Resume training from epoch 30
     $0 --dataset DFC2023Amini --resume 30 --model models_output/DFC2023Amini/DFC2023Amini_model_29.pth.tar
@@ -91,10 +89,6 @@ while [[ $# -gt 0 ]]; do
         --gpu-ids)
             GPU_IDS="$2"
             shift 2
-            ;;
-        --single-gpu)
-            SINGLE_GPU=true
-            shift
             ;;
         -b|--batch-size)
             BATCH_SIZE="$2"
@@ -176,11 +170,15 @@ echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
 echo "Output Dir:     $DATASET_OUTPUT_DIR"
 echo "Batch Size:     $BATCH_SIZE"
-if [[ "$SINGLE_GPU" == true ]]; then
-    echo "GPU Mode:       Single GPU (GPU 0)"
+
+# Determine GPU mode based on number of GPUs
+GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+if [[ $GPU_COUNT -eq 1 ]]; then
+    echo "GPU Mode:       Single GPU (GPU $GPU_IDS)"
 else
     echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
 fi
+
 echo "Resume Epoch:   $RESUME_EPOCH"
 echo "Auto Resume:    $AUTO_RESUME"
 if [[ $RESUME_EPOCH -gt 0 ]]; then
@@ -215,7 +213,8 @@ if [[ $RESUME_EPOCH -gt 0 ]]; then
 fi
 
 # Add GPU options
-if [[ "$SINGLE_GPU" == true ]]; then
+GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+if [[ $GPU_COUNT -eq 1 ]]; then
     TRAIN_CMD="$TRAIN_CMD --single-gpu"
 else
     TRAIN_CMD="$TRAIN_CMD --gpu-ids $GPU_IDS"
