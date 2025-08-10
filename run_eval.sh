@@ -9,7 +9,6 @@ set -e  # Exit on error
 DATASET_NAME="DFC2019_crp512_bin"
 MODEL_PATH=""
 GPU_IDS="2"
-SINGLE_GPU=false
 BATCH_SIZE=1
 SKIP_PREDICTIONS=false
 FORCE_REGENERATE=false
@@ -51,7 +50,6 @@ Options:
     -d, --dataset NAME          Dataset name (required)
     -m, --model-path PATH       Path to model directory (default: pipeline_output/DATASET_NAME)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
-    --single-gpu                Use single GPU for prediction generation
     -b, --batch-size NUM        Batch size for prediction generation (default: 3)
     --skip-predictions          Skip prediction generation (use existing predictions)
     --force-regenerate          Force regenerate predictions even if they exist
@@ -78,7 +76,7 @@ Examples:
     $0 --dataset DFC2023S --force-regenerate
 
     # Use single GPU
-    $0 --dataset Dublin --single-gpu --batch-size 6
+    $0 --dataset Dublin --gpu-ids 0 --batch-size 6
 EOF
 }
 
@@ -96,10 +94,6 @@ while [[ $# -gt 0 ]]; do
         --gpu-ids)
             GPU_IDS="$2"
             shift 2
-            ;;
-        --single-gpu)
-            SINGLE_GPU=true
-            shift
             ;;
         -b|--batch-size)
             BATCH_SIZE="$2"
@@ -157,13 +151,15 @@ print_status "Dataset:        $DATASET_NAME"
 print_status "Model Path:     $MODEL_PATH"
 print_status "CSV file:       $CSV_FILE"
 print_status "Batch Size:     $BATCH_SIZE"
-if [[ "$SINGLE_GPU" == true ]]; then
-    # Extract first GPU from GPU_IDS for single GPU mode
-    FIRST_GPU=$(echo "$GPU_IDS" | cut -d',' -f1)
-    print_status "GPU Mode:       Single GPU (GPU $FIRST_GPU)"
+
+# Determine GPU mode based on number of GPUs
+GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+if [[ $GPU_COUNT -eq 1 ]]; then
+    print_status "GPU Mode:       Single GPU (GPU $GPU_IDS)"
 else
     print_status "GPU Mode:       Multi-GPU [$GPU_IDS]"
 fi
+
 print_status ""
 print_status "Pipeline Steps:"
 print_status "  Generate Predictions: $([ "$SKIP_PREDICTIONS" == true ] && echo "SKIP" || echo "RUN")"
@@ -211,7 +207,10 @@ if [[ "$SKIP_PREDICTIONS" == false ]]; then
         
         # Build prediction command with GPU options
         PRED_CMD="python test.py --model \"$MODEL_PATH\" --csv \"$CSV_FILE\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
-        if [[ "$SINGLE_GPU" == true ]]; then
+        
+        # Determine GPU mode and add appropriate flag
+        GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
+        if [[ $GPU_COUNT -eq 1 ]]; then
             PRED_CMD="$PRED_CMD --single-gpu"
         fi
         
