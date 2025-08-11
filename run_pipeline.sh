@@ -6,8 +6,8 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="Huawei_Contest"
-DATASET_PATH="/home/asfand/Ahmad/datasets/Huawei_Contest"
+DATASET_NAME="DFC2019_crp512_bin"
+DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2019_crp512_bin"
 EPOCHS=100
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
@@ -15,8 +15,8 @@ SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
 SKIP_EVALUATION=false
-GPU_IDS="1"
-BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
+GPU_IDS="0"
+BATCH_SIZE=2 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 FORCE_REGENERATE_PREDICTIONS=false
 
