@@ -20,6 +20,12 @@ BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 FORCE_REGENERATE_PREDICTIONS=false
 
+# Clipping options for testing and evaluation
+ENABLE_CLIPPING=false
+CLIPPING_THRESHOLD=30.0
+DISABLE_TARGET_FILTERING=false
+TARGET_THRESHOLD=1.0
+
 # Help function
 show_help() {
     cat << EOF
@@ -43,6 +49,13 @@ Options:
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     --force-regenerate          Force regenerate predictions during evaluation
     -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 1)
+    
+    Clipping Options (for testing and evaluation):
+    --enable-clipping           Enable clipping of predictions >= threshold (default: disabled)
+    --clipping-threshold NUM    Threshold for clipping predictions (default: 30.0)
+    --disable-target-filtering  Disable filtering targets <= threshold (default: enabled)
+    --target-threshold NUM      Threshold for target filtering (default: 1.0)
+    
     -h, --help                  Show this help message
 
 Examples:
@@ -122,6 +135,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         -b|--batch-size)
             BATCH_SIZE="$2"
+            shift 2
+            ;;
+        --enable-clipping)
+            ENABLE_CLIPPING=true
+            shift
+            ;;
+        --clipping-threshold)
+            CLIPPING_THRESHOLD="$2"
+            shift 2
+            ;;
+        --disable-target-filtering)
+            DISABLE_TARGET_FILTERING=true
+            shift
+            ;;
+        --target-threshold)
+            TARGET_THRESHOLD="$2"
             shift 2
             ;;
         -h|--help)
@@ -416,6 +445,15 @@ if [[ "$SKIP_TESTING" == false ]]; then
     # Build testing command with GPU options and memory management
     TEST_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
     
+    # Add clipping options
+    if [[ "$ENABLE_CLIPPING" == true ]]; then
+        TEST_CMD="$TEST_CMD --enable-clipping --clipping-threshold $CLIPPING_THRESHOLD"
+    fi
+    if [[ "$DISABLE_TARGET_FILTERING" == true ]]; then
+        TEST_CMD="$TEST_CMD --disable-target-filtering"
+    fi
+    TEST_CMD="$TEST_CMD --target-threshold $TARGET_THRESHOLD"
+    
     echo "Command: $TEST_CMD"
     echo "Found ${#MODEL_FILES[@]} model checkpoints to test"
     echo ""
@@ -505,6 +543,15 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     # Build evaluation command with memory management
     EVAL_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
     
+    # Add clipping options
+    if [[ "$ENABLE_CLIPPING" == true ]]; then
+        EVAL_CMD="$EVAL_CMD --enable-clipping --clipping-threshold $CLIPPING_THRESHOLD"
+    fi
+    if [[ "$DISABLE_TARGET_FILTERING" == true ]]; then
+        EVAL_CMD="$EVAL_CMD --disable-target-filtering"
+    fi
+    EVAL_CMD="$EVAL_CMD --target-threshold $TARGET_THRESHOLD"
+    
     echo "Command: $EVAL_CMD"
     echo ""
     
@@ -545,6 +592,16 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     if [[ "$PREDICTION_SUCCESS" == true ]]; then
         echo "Running evaluation metrics..."
         METRICS_CMD="python evaluate.py --predictions-dir \"$PREDICTIONS_DIR\" --csv-file \"$TEST_CSV\" --dataset-name \"$DATASET_NAME\" --output-dir \"$DATASET_OUTPUT_DIR\""
+        
+        # Add clipping options
+        if [[ "$ENABLE_CLIPPING" == true ]]; then
+            METRICS_CMD="$METRICS_CMD --enable-clipping --clipping-threshold $CLIPPING_THRESHOLD"
+        fi
+        if [[ "$DISABLE_TARGET_FILTERING" == true ]]; then
+            METRICS_CMD="$METRICS_CMD --disable-target-filtering"
+        fi
+        METRICS_CMD="$METRICS_CMD --target-threshold $TARGET_THRESHOLD"
+        
         echo "Command: $METRICS_CMD"
         
         eval "$METRICS_CMD" 2>&1 | tee -a "$PIPELINE_LOG"

@@ -13,6 +13,12 @@ BATCH_SIZE=1
 SKIP_PREDICTIONS=false
 FORCE_REGENERATE=false
 
+# Clipping options
+ENABLE_CLIPPING=false
+CLIPPING_THRESHOLD=30.0
+DISABLE_TARGET_FILTERING=false
+TARGET_THRESHOLD=1.0
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -53,6 +59,13 @@ Options:
     -b, --batch-size NUM        Batch size for prediction generation (default: 3)
     --skip-predictions          Skip prediction generation (use existing predictions)
     --force-regenerate          Force regenerate predictions even if they exist
+    
+    Clipping Options:
+    --enable-clipping           Enable clipping of predictions >= threshold (default: disabled)
+    --clipping-threshold NUM    Threshold for clipping predictions (default: 30.0)
+    --disable-target-filtering  Disable filtering targets <= threshold (default: enabled)
+    --target-threshold NUM      Threshold for target filtering (default: 1.0)
+    
     -h, --help                  Show this help message
 
 Available datasets:
@@ -106,6 +119,22 @@ while [[ $# -gt 0 ]]; do
         --force-regenerate)
             FORCE_REGENERATE=true
             shift
+            ;;
+        --enable-clipping)
+            ENABLE_CLIPPING=true
+            shift
+            ;;
+        --clipping-threshold)
+            CLIPPING_THRESHOLD="$2"
+            shift 2
+            ;;
+        --disable-target-filtering)
+            DISABLE_TARGET_FILTERING=true
+            shift
+            ;;
+        --target-threshold)
+            TARGET_THRESHOLD="$2"
+            shift 2
             ;;
         -h|--help)
             show_help
@@ -234,11 +263,22 @@ fi
 # Step 2: Run evaluation
 print_status "Running evaluation on saved predictions..."
 
-python evaluate.py \
-    --predictions-dir "$PREDICTIONS_DIR" \
-    --csv-file "$CSV_FILE" \
-    --dataset-name "$DATASET_NAME" \
-    --output-dir "$MODEL_PATH"
+# Build evaluation command with optional clipping parameters
+EVAL_CMD="python evaluate.py --predictions-dir \"$PREDICTIONS_DIR\" --csv-file \"$CSV_FILE\" --dataset-name \"$DATASET_NAME\" --output-dir \"$MODEL_PATH\""
+
+if [[ "$ENABLE_CLIPPING" == true ]]; then
+    EVAL_CMD="$EVAL_CMD --enable-clipping --clipping-threshold $CLIPPING_THRESHOLD"
+fi
+
+if [[ "$DISABLE_TARGET_FILTERING" == true ]]; then
+    EVAL_CMD="$EVAL_CMD --disable-target-filtering"
+fi
+
+# Always add target threshold (whether filtering is enabled or not)
+EVAL_CMD="$EVAL_CMD --target-threshold $TARGET_THRESHOLD"
+
+print_status "Command: $EVAL_CMD"
+eval "$EVAL_CMD"
 
 if [ $? -eq 0 ]; then
     print_success "Evaluation completed successfully"

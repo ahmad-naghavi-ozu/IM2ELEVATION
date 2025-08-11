@@ -42,6 +42,14 @@ def main():
                         help='batch size for testing (default: 3)')
     parser.add_argument('--save-predictions', action='store_true',
                         help='save prediction outputs as numpy arrays')
+    parser.add_argument('--enable-clipping', action='store_true',
+                        help='enable prediction clipping (disabled by default)')
+    parser.add_argument('--clipping-threshold', default=30.0, type=float,
+                        help='height threshold for clipping predictions (default: 30.0 meters)')
+    parser.add_argument('--disable-target-filtering', action='store_true',
+                        help='disable target-based filtering of predictions (enabled by default)')
+    parser.add_argument('--target-threshold', default=1.0, type=float,
+                        help='target height threshold for filtering predictions (default: 1.0 meters)')
     args = parser.parse_args()
     
     # Extract dataset name from model path for preprocessing
@@ -184,7 +192,11 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
 
         totalNumber = totalNumber + batchSize
 
-        errors = util.evaluateError(output, depth, i, batchSize)
+        errors = util.evaluateError(output, depth, i, batchSize, 
+                                    enable_clipping=args.enable_clipping, 
+                                    clipping_threshold=args.clipping_threshold,
+                                    enable_target_filtering=not args.disable_target_filtering,
+                                    target_threshold=args.target_threshold)
 
         errorSum = util.addErrors(errorSum, errors, batchSize)
         averageError = util.averageErrors(errorSum, totalNumber)
