@@ -217,7 +217,7 @@ if [ ! -d "$MODEL_PATH" ]; then
 fi
 
 # Check if model checkpoints exist
-if [ ! -f "${MODEL_PATH}"/*.tar ]; then
+if ! ls "${MODEL_PATH}"/*.tar >/dev/null 2>&1; then
     print_error "No model checkpoints found in: $MODEL_PATH"
     exit 1
 fi
@@ -237,12 +237,7 @@ if [[ "$SKIP_PREDICTIONS" == false ]]; then
         # Build prediction command with GPU options
         PRED_CMD="python test.py --model \"$MODEL_PATH\" --csv \"$CSV_FILE\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
         
-        # Determine GPU mode and add appropriate flag
-        GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
-        if [[ $GPU_COUNT -eq 1 ]]; then
-            PRED_CMD="$PRED_CMD --single-gpu"
-        fi
-        
+        # Note: GPU mode is automatically handled by test.py based on gpu-ids
         print_status "Command: $PRED_CMD"
         eval "$PRED_CMD"
         
