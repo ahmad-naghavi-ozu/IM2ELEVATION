@@ -138,7 +138,9 @@ class HeightRegressionMetrics(object):
         
         return mse, rmse, rmse_building, high_rise_rmse, mid_rise_rmse, low_rise_rmse, mae, delta1, delta2, delta3
 
-    def evaluate_from_saved_predictions(self, predictions_dir, csv_file, dataset_name):
+    def evaluate_from_saved_predictions(self, predictions_dir, csv_file, dataset_name,
+                                      enable_clipping=False, clipping_threshold=30.0,
+                                      enable_target_filtering=True, target_threshold=1.0):
         """
         Evaluate predictions saved as .npy files against ground truth DSM and SEM files.
         
@@ -243,13 +245,15 @@ class HeightRegressionMetrics(object):
                 # Apply the same preprocessing as in test phase (util.evaluateError)
                 # Note: predictions are already scaled by 100, so no additional scaling needed
                 
-                # Apply masking: set predictions to 0 where ground truth <= 1
-                idx_zero = np.where(gt_dsm <= 1)
+                # Apply masking: set predictions to 0 where ground truth <= threshold (if enabled)
                 pred_dsm_processed = pred_dsm.copy()
-                pred_dsm_processed[idx_zero] = 0
+                if enable_target_filtering:
+                    idx_zero = np.where(gt_dsm <= target_threshold)
+                    pred_dsm_processed[idx_zero] = 0
                 
-                # Apply clipping: set predictions to 0 where >= 30 (matching test preprocessing)
-                pred_dsm_processed[np.where(pred_dsm_processed >= 30)] = 0
+                # Apply clipping: set predictions to 0 where >= threshold (if enabled)
+                if enable_clipping:
+                    pred_dsm_processed[np.where(pred_dsm_processed >= clipping_threshold)] = 0
                 
                 # Add batch dimension for compatibility with original metrics
                 pred_dsm_batch = np.expand_dims(pred_dsm_processed, axis=0)
@@ -411,6 +415,16 @@ if __name__ == "__main__":
     parser.add_argument('--output-dir', 
                        help='Directory to save results (default: parent of predictions-dir)')
     
+    # Optional clipping parameters
+    parser.add_argument('--enable-clipping', action='store_true', default=False,
+                       help='Enable clipping of predictions >= threshold (default: disabled)')
+    parser.add_argument('--clipping-threshold', type=float, default=30.0,
+                       help='Threshold for clipping predictions (default: 30.0)')
+    parser.add_argument('--disable-target-filtering', action='store_true', default=False,
+                       help='Disable filtering targets <= threshold (default: enabled)')
+    parser.add_argument('--target-threshold', type=float, default=1.0,
+                       help='Threshold for target filtering (default: 1.0)')
+    
     args = parser.parse_args()
     
     # Default to parent directory of predictions-dir instead of predictions-dir itself
@@ -419,13 +433,23 @@ if __name__ == "__main__":
     print(f"Evaluating predictions from: {args.predictions_dir}")
     print(f"Using ground truth from: {args.csv_file}")
     print(f"Dataset: {args.dataset_name}")
+    print(f"Clipping enabled: {args.enable_clipping}")
+    if args.enable_clipping:
+        print(f"Clipping threshold: {args.clipping_threshold}")
+    print(f"Target filtering enabled: {not args.disable_target_filtering}")
+    if not args.disable_target_filtering:
+        print(f"Target threshold: {args.target_threshold}")
     
     # Initialize metrics and run evaluation
     metrics_calculator = HeightRegressionMetrics()
     metrics = metrics_calculator.evaluate_from_saved_predictions(
         args.predictions_dir, 
         args.csv_file, 
-        args.dataset_name
+        args.dataset_name,
+        enable_clipping=args.enable_clipping,
+        clipping_threshold=args.clipping_threshold,
+        enable_target_filtering=not args.disable_target_filtering,
+        target_threshold=args.target_threshold
     )
     
     if metrics:

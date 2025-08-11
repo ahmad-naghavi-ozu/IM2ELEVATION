@@ -17,6 +17,12 @@ GPU_IDS="0,1,2,3"
 BATCH_SIZE=2
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 
+# Clipping options (for any evaluation during training)
+ENABLE_CLIPPING=false
+CLIPPING_THRESHOLD=30.0
+DISABLE_TARGET_FILTERING=false
+TARGET_THRESHOLD=1.0
+
 # Help function
 show_help() {
     cat << EOF
@@ -35,6 +41,13 @@ Options:
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
     -b, --batch-size NUM        Batch size per GPU for training (default: 2)
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
+    
+    Clipping Options (for evaluation during training):
+    --enable-clipping           Enable clipping of predictions >= threshold (default: disabled)
+    --clipping-threshold NUM    Threshold for clipping predictions (default: 30.0)
+    --disable-target-filtering  Disable filtering targets <= threshold (default: enabled)
+    --target-threshold NUM      Threshold for target filtering (default: 1.0)
+    
     -h, --help                  Show this help message
 
 Examples:
@@ -97,6 +110,22 @@ while [[ $# -gt 0 ]]; do
         --no-resume)
             AUTO_RESUME=false
             shift
+            ;;
+        --enable-clipping)
+            ENABLE_CLIPPING=true
+            shift
+            ;;
+        --clipping-threshold)
+            CLIPPING_THRESHOLD="$2"
+            shift 2
+            ;;
+        --disable-target-filtering)
+            DISABLE_TARGET_FILTERING=true
+            shift
+            ;;
+        --target-threshold)
+            TARGET_THRESHOLD="$2"
+            shift 2
             ;;
         -h|--help)
             show_help

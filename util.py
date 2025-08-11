@@ -42,7 +42,8 @@ def setNanToZero(input, target):
     return _input, _target, nanMask, nValidElement
 
 
-def evaluateError(output, target, idx, batches):
+def evaluateError(output, target, idx, batches, enable_clipping=False, clipping_threshold=30.0, 
+                  enable_target_filtering=True, target_threshold=1.0):
 
     errors = {'MSE': 0, 'RMSE': 0, 'MAE': 0,'SSIM':0}
                                                                                                                                                                                                                                                                                                                                                                     
@@ -72,10 +73,21 @@ def evaluateError(output, target, idx, batches):
         target_0_1 = target_0_1*100
 
 
-        idx_zero = np.where(target_0_1 <=1)
-        output_0_1[idx_zero] = 0
-        #target_0_1[idx_zero] = 0
-        output_0_1[np.where(output_0_1>=30)] = 0
+        # Optional target filtering - enabled by default to maintain compatibility
+        if enable_target_filtering:
+            idx_zero = np.where(target_0_1 <= target_threshold)
+            output_0_1[idx_zero] = 0
+            if idx == 0:  # Log only once per batch to avoid spam
+                filtered_count = len(idx_zero[0]) if len(idx_zero) > 0 else 0
+                print(f"[FILTERING] Applied ≤{target_threshold}m target filtering, filtered {filtered_count} predictions")
+        
+        # Optional clipping - disabled by default to allow full height prediction range
+        if enable_clipping:
+            clipped_indices = np.where(output_0_1 >= clipping_threshold)
+            clipped_count = len(clipped_indices[0]) if len(clipped_indices) > 0 else 0
+            output_0_1[clipped_indices] = 0
+            if idx == 0:  # Log only once per batch to avoid spam
+                print(f"[CLIPPING] Applied ≥{clipping_threshold}m threshold, clipped {clipped_count} predictions")
 
        
         output_0_1 = torch.from_numpy(output_0_1).float().to(device)

@@ -14,6 +14,10 @@ OUTPUT_FILE=""
 SAVE_RESULTS=true
 GPU_IDS="0"
 BATCH_SIZE=1
+ENABLE_CLIPPING=false
+CLIPPING_THRESHOLD=30.0
+DISABLE_TARGET_FILTERING=false
+TARGET_THRESHOLD=1.0
 
 # Help function
 show_help() {
@@ -30,17 +34,27 @@ Options:
     -o, --output FILE           Output file for results (auto-generated if not specified)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
     --batch-size NUM            Batch size for testing (default: 1)
+    --enable-clipping           Enable prediction clipping (disabled by default for full height range)
+    --clipping-threshold NUM    Height threshold for clipping predictions in meters (default: 30.0)
+    --disable-target-filtering  Disable target-based filtering of predictions (enabled by default)
+    --target-threshold NUM      Target height threshold for filtering predictions in meters (default: 1.0)
     --no-save                   Don't save results to file (print to terminal only)
     -h, --help                  Show this help message
 
 Examples:
-    # Basic testing (uses pipeline_output/Dublin/)
+    # Basic testing with no clipping (default - allows full height range)
     $0 --dataset Dublin
 
-    # Test with custom base directory
-    $0 --dataset Dublin --base-dir my_models
+    # Test with legacy clipping enabled (30m threshold)
+    $0 --dataset Dublin --enable-clipping
 
-    # Test with specific model directory
+    # Test with custom clipping threshold
+    $0 --dataset Dublin --enable-clipping --clipping-threshold 50.0
+
+    # Test with no target filtering (allows predictions on all areas)
+    $0 --dataset Dublin --disable-target-filtering
+
+    # Test with custom model directory
     $0 --dataset contest --model-dir my_models/contest_experiment1
 EOF
 }
@@ -74,6 +88,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --batch-size)
             BATCH_SIZE="$2"
+            shift 2
+            ;;
+        --enable-clipping)
+            ENABLE_CLIPPING=true
+            shift
+            ;;
+        --clipping-threshold)
+            CLIPPING_THRESHOLD="$2"
+            shift 2
+            ;;
+        --disable-target-filtering)
+            DISABLE_TARGET_FILTERING=true
+            shift
+            ;;
+        --target-threshold)
+            TARGET_THRESHOLD="$2"
             shift 2
             ;;
         --no-save)
@@ -192,6 +222,18 @@ fi
 
 # Build testing command
 TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH --batch-size $BATCH_SIZE"
+
+# Add clipping options
+if [[ "$ENABLE_CLIPPING" == true ]]; then
+    TEST_CMD="$TEST_CMD --enable-clipping"
+fi
+TEST_CMD="$TEST_CMD --clipping-threshold $CLIPPING_THRESHOLD"
+
+# Add target filtering options  
+if [[ "$DISABLE_TARGET_FILTERING" == true ]]; then
+    TEST_CMD="$TEST_CMD --disable-target-filtering"
+fi
+TEST_CMD="$TEST_CMD --target-threshold $TARGET_THRESHOLD"
 
 # Add GPU options
 GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
