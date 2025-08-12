@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Default values
-DATASET_NAME="Dublin"
+DATASET_NAME="DFC2019_crp512_bin"
 MODEL_BASE_DIR="pipeline_output"
 MODEL_DIR=""
 CSV_PATH=""
@@ -18,6 +18,7 @@ ENABLE_CLIPPING=false
 CLIPPING_THRESHOLD=30.0
 DISABLE_TARGET_FILTERING=false
 TARGET_THRESHOLD=1.0
+DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline - default false
 
 # Help function
 show_help() {
@@ -38,6 +39,7 @@ Options:
     --clipping-threshold NUM    Height threshold for clipping predictions in meters (default: 30.0)
     --disable-target-filtering  Disable target-based filtering of predictions (enabled by default)
     --target-threshold NUM      Target height threshold for filtering predictions in meters (default: 1.0)
+    --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
     --no-save                   Don't save results to file (print to terminal only)
     -h, --help                  Show this help message
 
@@ -105,6 +107,10 @@ while [[ $# -gt 0 ]]; do
         --target-threshold)
             TARGET_THRESHOLD="$2"
             shift 2
+            ;;
+        --disable-normalization)
+            DISABLE_NORMALIZATION=true
+            shift
             ;;
         --no-save)
             SAVE_RESULTS=false
@@ -179,139 +185,3 @@ echo "Model Dir:      $MODEL_DIR"
 echo "Test CSV:       $CSV_PATH"
 echo "Model Files:    ${#MODEL_FILES[@]} checkpoints found"
 echo "Batch Size:     $BATCH_SIZE"
-
-# Determine GPU mode based on number of GPUs
-GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
-if [[ $GPU_COUNT -eq 1 ]]; then
-    echo "GPU Mode:       Single GPU (GPU $GPU_IDS)"
-else
-    echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
-fi
-
-if [[ "$SAVE_RESULTS" == true ]]; then
-    echo "Output File:    $OUTPUT_FILE"
-else
-    echo "Output:         Terminal only"
-fi
-echo "======================================"
-
-# Count test samples
-TEST_SAMPLES=$(wc -l < "$CSV_PATH")
-echo "Test samples: $TEST_SAMPLES"
-echo ""
-
-# Show first few model files
-echo "Model checkpoints found:"
-for i in "${!MODEL_FILES[@]}"; do
-    if [[ $i -lt 5 ]]; then
-        echo "  $(basename "${MODEL_FILES[$i]}")"
-    elif [[ $i -eq 5 ]]; then
-        echo "  ... and $((${#MODEL_FILES[@]} - 5)) more"
-        break
-    fi
-done
-echo ""
-
-# Confirm before starting
-read -p "Start testing? (y/N): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Testing cancelled."
-    exit 0
-fi
-
-# Build testing command
-TEST_CMD="python test.py --model $MODEL_DIR --csv $CSV_PATH --batch-size $BATCH_SIZE"
-
-# Add clipping options
-if [[ "$ENABLE_CLIPPING" == true ]]; then
-    TEST_CMD="$TEST_CMD --enable-clipping"
-fi
-TEST_CMD="$TEST_CMD --clipping-threshold $CLIPPING_THRESHOLD"
-
-# Add target filtering options  
-if [[ "$DISABLE_TARGET_FILTERING" == true ]]; then
-    TEST_CMD="$TEST_CMD --disable-target-filtering"
-fi
-TEST_CMD="$TEST_CMD --target-threshold $TARGET_THRESHOLD"
-
-# Add GPU options
-GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
-if [[ $GPU_COUNT -eq 1 ]]; then
-    TEST_CMD="$TEST_CMD --single-gpu"
-else
-    TEST_CMD="$TEST_CMD --gpu-ids $GPU_IDS"
-fi
-
-# Start testing
-echo "Starting testing..."
-echo "Command: $TEST_CMD"
-echo ""
-
-if [[ "$SAVE_RESULTS" == true ]]; then
-    echo "Results will be saved to: $OUTPUT_FILE"
-    echo ""
-    
-    # Create header for results file
-    {
-        echo "IM2ELEVATION Test Results"
-        echo "========================"
-        echo "Dataset: $DATASET_NAME"
-        echo "Test CSV: $CSV_PATH"
-        echo "Model Dir: $MODEL_DIR"
-        echo "Test Date: $(date)"
-        echo "Test Samples: $TEST_SAMPLES"
-        echo "Model Checkpoints: ${#MODEL_FILES[@]}"
-        echo ""
-        echo "Results:"
-        echo "--------"
-    } > "$OUTPUT_FILE"
-    
-    # Run testing with output to file and terminal
-    eval "$TEST_CMD" 2>&1 | tee -a "$OUTPUT_FILE"
-    
-    echo ""
-    echo "======================================"
-    echo "Testing completed!"
-    echo "Results saved to: $OUTPUT_FILE"
-    echo "======================================"
-    
-    # Show summary of results
-    echo ""
-    echo "Results Summary:"
-    echo "==============="
-    echo "Latest test results:"
-    grep -E "Model Loss|MSE|RMSE|MAE|SSIM" "$OUTPUT_FILE" | tail -n 20
-    
-    # Show comparison with paper results based on dataset
-    echo ""
-    echo "Reference (from IM2ELEVATION paper):"
-    case "${DATASET_NAME,,}" in
-        dublin*)
-            echo "Dublin dataset - MAE: 1.46m, RMSE: 3.05m"
-            echo "Note: Significant differences may indicate need for longer training"
-            ;;
-        dfc2018*|*dfc2018*)
-            echo "IEEE DFC2018 dataset - MAE: 1.19m, RMSE: 2.88m"
-            ;;
-        potsdam*|*potsdam*)
-            echo "ISPRS Potsdam dataset - MAE: 1.52m, RMSE: 2.64m"
-            ;;
-        vaihingen*|*vaihingen*)
-            echo "ISPRS Vaihingen dataset - RMSE: 4.66m (MAE not reported)"
-            ;;
-        *)
-            echo "No specific benchmark available for dataset: $DATASET_NAME"
-            echo "General note: Lower MAE and RMSE values indicate better performance"
-            ;;
-    esac
-    
-else
-    # Run testing with terminal output only
-    eval "$TEST_CMD"
-    
-    echo ""
-    echo "======================================"
-    echo "Testing completed!"
-    echo "======================================"
-fi

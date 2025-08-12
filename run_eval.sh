@@ -8,10 +8,11 @@ set -e  # Exit on error
 # Default values
 DATASET_NAME="DFC2019_crp512_bin"
 MODEL_PATH=""
-GPU_IDS="2"
+GPU_IDS="1"
 BATCH_SIZE=1
 SKIP_PREDICTIONS=false
 FORCE_REGENERATE=false
+DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline
 
 # Clipping options
 ENABLE_CLIPPING=false
@@ -59,13 +60,7 @@ Options:
     -b, --batch-size NUM        Batch size for prediction generation (default: 3)
     --skip-predictions          Skip prediction generation (use existing predictions)
     --force-regenerate          Force regenerate predictions even if they exist
-    
-    Clipping Options:
-    --enable-clipping           Enable clipping of predictions >= threshold (default: disabled)
-    --clipping-threshold NUM    Threshold for clipping predictions (default: 30.0)
-    --disable-target-filtering  Disable filtering targets <= threshold (default: enabled)
-    --target-threshold NUM      Threshold for target filtering (default: 1.0)
-    
+    --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
     -h, --help                  Show this help message
 
 Available datasets:
@@ -87,9 +82,6 @@ Examples:
 
     # Force regenerate predictions
     $0 --dataset DFC2023S --force-regenerate
-
-    # Use single GPU
-    $0 --dataset Dublin --gpu-ids 0 --batch-size 6
 EOF
 }
 
@@ -120,21 +112,9 @@ while [[ $# -gt 0 ]]; do
             FORCE_REGENERATE=true
             shift
             ;;
-        --enable-clipping)
-            ENABLE_CLIPPING=true
+        --disable-normalization)
+            DISABLE_NORMALIZATION=true
             shift
-            ;;
-        --clipping-threshold)
-            CLIPPING_THRESHOLD="$2"
-            shift 2
-            ;;
-        --disable-target-filtering)
-            DISABLE_TARGET_FILTERING=true
-            shift
-            ;;
-        --target-threshold)
-            TARGET_THRESHOLD="$2"
-            shift 2
             ;;
         -h|--help)
             show_help
@@ -180,19 +160,12 @@ print_status "Dataset:        $DATASET_NAME"
 print_status "Model Path:     $MODEL_PATH"
 print_status "CSV file:       $CSV_FILE"
 print_status "Batch Size:     $BATCH_SIZE"
-
-# Determine GPU mode based on number of GPUs
-GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
-if [[ $GPU_COUNT -eq 1 ]]; then
-    print_status "GPU Mode:       Single GPU (GPU $GPU_IDS)"
-else
-    print_status "GPU Mode:       Multi-GPU [$GPU_IDS]"
-fi
-
+print_status "GPU Mode:       [$GPU_IDS]"
 print_status ""
 print_status "Pipeline Steps:"
 print_status "  Generate Predictions: $([ "$SKIP_PREDICTIONS" == true ] && echo "SKIP" || echo "RUN")"
 print_status "  Force Regenerate:     $([ "$FORCE_REGENERATE" == true ] && echo "YES" || echo "NO")"
+print_status "  Disable Normalization: $([ "$DISABLE_NORMALIZATION" == true ] && echo "YES" || echo "NO")"
 print_status "  Evaluate Metrics:     RUN"
 print_status "=============================================="
 print_status ""
@@ -236,6 +209,9 @@ if [[ "$SKIP_PREDICTIONS" == false ]]; then
         
         # Build prediction command with GPU options
         PRED_CMD="python test.py --model \"$MODEL_PATH\" --csv \"$CSV_FILE\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
+        if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+            PRED_CMD="$PRED_CMD --disable-normalization"
+        fi
         
         # Note: GPU mode is automatically handled by test.py based on gpu-ids
         print_status "Command: $PRED_CMD"

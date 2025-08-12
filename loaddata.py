@@ -11,9 +11,10 @@ import cv2
 class depthDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, csv_file, transform=None):
+    def __init__(self, csv_file, transform=None, disable_normalization=False):
         self.frame = pd.read_csv(csv_file, header=None)
         self.transform = transform
+        self.disable_normalization = disable_normalization
 
 
     def __getitem__(self, idx):
@@ -23,17 +24,21 @@ class depthDataset(Dataset):
 
 
         depth = cv2.imread(depth_name,-1)
-        # Handle different depth image formats
-        if depth.dtype == np.uint8:
-            # For uint8 datasets convert to float first to avoid overflow
-            depth = depth.astype(np.float32) * 1000
-            depth = depth.astype(np.uint16)
-        elif depth.dtype == np.float32:
-            # For float32 datasets multiply and convert directly
-            depth = (depth * 1000).astype(np.uint16)
+        # Handle different depth image formats with optional normalization
+        if not self.disable_normalization:
+            # Apply original normalization (×1000) - keep as float32
+            if depth.dtype == np.uint8:
+                # For uint8 datasets convert to float first to avoid overflow
+                depth = depth.astype(np.float32) * 1000
+            elif depth.dtype == np.float32:
+                # For float32 datasets multiply directly
+                depth = depth * 1000
+            else:
+                # For other formats, convert to float32 and multiply
+                depth = depth.astype(np.float32) * 1000
         else:
-            # For other formats, attempt direct conversion
-            depth = (depth * 1000).astype(np.uint16)
+            # Skip normalization - convert to float32 but keep original values
+            depth = depth.astype(np.float32)
         #depth  = cv2.cvtColor(depth  , cv2.COLOR_BGR2GRAY)
         depth = Image.fromarray(depth)
         image = Image.open(image_name)
@@ -48,7 +53,7 @@ class depthDataset(Dataset):
     def __len__(self):
         return len(self.frame)
 
-def getTrainingData(batch_size=64, csv_data='', dataset_name=None):
+def getTrainingData(batch_size=64, csv_data='', dataset_name=None, disable_normalization=False):
     __imagenet_pca = {
         'eigval': torch.Tensor([0.2175, 0.0188, 0.0045]),
         'eigvec': torch.Tensor([
@@ -69,7 +74,7 @@ def getTrainingData(batch_size=64, csv_data='', dataset_name=None):
                                             PreprocessInput(max_size=440, dataset_name=dataset_name),  # New preprocessing step with dataset name
                                             #RandomHorizontalFlip(),
                                             CenterCrop([440, 440], [220, 220]),
-                                            ToTensor(),
+                                            ToTensor(is_train=True, disable_normalization=disable_normalization),
                                             Lighting(0.1, __imagenet_pca[
                                                 'eigval'], __imagenet_pca['eigvec']),
                                             ColorJitter(
@@ -79,7 +84,7 @@ def getTrainingData(batch_size=64, csv_data='', dataset_name=None):
                                             ),
                                             Normalize(__imagenet_stats['mean'],
                                                       __imagenet_stats['std'])
-                                        ]))
+                                        ]), disable_normalization=disable_normalization)
 
 
 
@@ -98,7 +103,7 @@ def getTrainingData(batch_size=64, csv_data='', dataset_name=None):
     return dataloader_training
 
 
-def getTestingData(batch_size=3, csv='', dataset_name=None):
+def getTestingData(batch_size=3, csv='', dataset_name=None, disable_normalization=False):
 
     __imagenet_stats = {'mean': [0.485, 0.456, 0.406],
                         'std': [0.229, 0.224, 0.225]}
@@ -120,10 +125,10 @@ def getTestingData(batch_size=3, csv='', dataset_name=None):
                                        transform=transforms.Compose([
                                            PreprocessInput(max_size=440, dataset_name=dataset_name),  # New preprocessing step with dataset name
                                            CenterCrop([440, 440],[440,440]),
-                                           ToTensor(),
+                                           ToTensor(is_train=False, disable_normalization=disable_normalization),
                                            Normalize(__imagenet_stats['mean'],
                                                      __imagenet_stats['std'])
-                                       ]))
+                                       ]), disable_normalization=disable_normalization)
 
     dataloader_testing = DataLoader(transformed_testing, batch_size,
                                     shuffle=False, num_workers=12, pin_memory=False)

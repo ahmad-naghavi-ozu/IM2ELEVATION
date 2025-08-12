@@ -43,6 +43,8 @@ parser.add_argument('--batch-size', default=2, type=int,
 parser.add_argument('--data', default='adjust')
 parser.add_argument('--csv', default='')
 parser.add_argument('--model', default='')
+parser.add_argument('--disable-normalization', action='store_true', default=False,
+                    help='disable entire normalization pipeline (x1000, /100000, x100) for raw model training (default: False)')
 
 args = parser.parse_args()
 # Extract dataset name from path for model naming
@@ -74,7 +76,7 @@ def define_model(is_resnet, is_densenet, is_senet, device_id=0):
 def main():
     
     global args
-    args = parser.parse_args()
+    # args already parsed at module level, just reference the global variable
     
     # Configure GPU usage
     device_ids = [int(x.strip()) for x in args.gpu_ids.split(',')]
@@ -124,7 +126,7 @@ def main():
     #optimizer = torch.optim.SGD(model.parameters(), args.lr, weight_decay=args.weight_decay)
     optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
 
-    train_loader = loaddata.getTrainingData(batch_size, args.csv, dataset_name)
+    train_loader = loaddata.getTrainingData(batch_size, args.csv, dataset_name, args.disable_normalization)
 
     logfolder = "runs/"+args.data 
     print(f"Training dataset: {os.path.basename(args.data)}")
@@ -255,8 +257,6 @@ def train(train_loader, model, optimizer, epoch, writer):
 
     cos = nn.CosineSimilarity(dim=1, eps=0)
     get_gradient = sobel.Sobel().cuda()
-    global args
-    args = parser.parse_args()
 
     end = time.time()
     for i, sample_batched in enumerate(train_loader):

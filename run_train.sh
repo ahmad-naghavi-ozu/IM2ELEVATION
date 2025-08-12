@@ -16,6 +16,7 @@ RESUME_MODEL=""
 GPU_IDS="0,1,2,3"
 BATCH_SIZE=2
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
+DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline
 
 # Clipping options (for any evaluation during training)
 ENABLE_CLIPPING=false
@@ -47,7 +48,7 @@ Options:
     --clipping-threshold NUM    Threshold for clipping predictions (default: 30.0)
     --disable-target-filtering  Disable filtering targets <= threshold (default: enabled)
     --target-threshold NUM      Threshold for target filtering (default: 1.0)
-    
+    --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model training
     -h, --help                  Show this help message
 
 Examples:
@@ -109,6 +110,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-resume)
             AUTO_RESUME=false
+            shift
+            ;;
+        --disable-normalization)
+            DISABLE_NORMALIZATION=true
             shift
             ;;
         --enable-clipping)
@@ -199,17 +204,10 @@ echo "Epochs:         $EPOCHS"
 echo "Learning Rate:  $LEARNING_RATE"
 echo "Output Dir:     $DATASET_OUTPUT_DIR"
 echo "Batch Size:     $BATCH_SIZE"
-
-# Determine GPU mode based on number of GPUs
-GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
-if [[ $GPU_COUNT -eq 1 ]]; then
-    echo "GPU Mode:       Single GPU (GPU $GPU_IDS)"
-else
-    echo "GPU Mode:       Multi-GPU [$GPU_IDS]"
-fi
-
+echo "GPU Mode:       [$GPU_IDS]"
 echo "Resume Epoch:   $RESUME_EPOCH"
 echo "Auto Resume:    $AUTO_RESUME"
+echo "Disable Norm:   $DISABLE_NORMALIZATION"
 if [[ $RESUME_EPOCH -gt 0 ]]; then
     echo "Resume Model:   $RESUME_MODEL"
 fi
@@ -241,13 +239,13 @@ if [[ $RESUME_EPOCH -gt 0 ]]; then
     TRAIN_CMD="$TRAIN_CMD --model $RESUME_MODEL"
 fi
 
-# Add GPU options
-GPU_COUNT=$(echo "$GPU_IDS" | tr ',' '\n' | wc -l)
-if [[ $GPU_COUNT -eq 1 ]]; then
-    TRAIN_CMD="$TRAIN_CMD --single-gpu"
-else
-    TRAIN_CMD="$TRAIN_CMD --gpu-ids $GPU_IDS"
+# Add normalization flag
+if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+    TRAIN_CMD="$TRAIN_CMD --disable-normalization"
 fi
+
+# Add GPU options
+TRAIN_CMD="$TRAIN_CMD --gpu-ids $GPU_IDS"
 
 # Start training
 echo "Starting training..."
