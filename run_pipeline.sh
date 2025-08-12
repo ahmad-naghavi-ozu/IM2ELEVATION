@@ -18,7 +18,7 @@ SKIP_EVALUATION=false
 GPU_IDS="0"
 BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
-FORCE_REGENERATE_PREDICTIONS=false
+FORCE_REGENERATE_PREDICTIONS=true  # Force regenerate predictions during evaluation
 DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline (x1000, /100000, x100)
 
 # Clipping options for testing and evaluation
