@@ -50,6 +50,8 @@ def main():
                         help='disable target-based filtering of predictions (enabled by default)')
     parser.add_argument('--target-threshold', default=1.0, type=float,
                         help='target height threshold for filtering predictions (default: 1.0 meters)')
+    parser.add_argument('--disable-normalization', action='store_true', default=False,
+                        help='disable entire normalization pipeline (x1000, /100000, x100) to see raw model outputs (default: False)')
     args = parser.parse_args()
     
     # Extract dataset name from model path for preprocessing
@@ -125,7 +127,7 @@ def main():
             warnings.simplefilter("ignore")
             model.load_state_dict(state_dict, strict=False)
 
-    test_loader = loaddata.getTestingData(args.batch_size, args.csv, dataset_name)
+    test_loader = loaddata.getTestingData(args.batch_size, args.csv, dataset_name, disable_normalization=args.disable_normalization)
     result = test(test_loader, model, args, checkpoint_name, predictions_dir, args.csv)
     
     print("=" * 60)
@@ -172,10 +174,11 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
             batch_size = output.size(0)
             for j in range(batch_size):
                 if prediction_idx < len(image_names):
-                    # Convert prediction back to original DSM scale
-                    # Complete transformation: Original_DSM * 1000 / 100000 = Original_DSM / 100
-                    # So to restore: model_output * 100 = Original_DSM
-                    pred_array = output[j, 0].cpu().detach().numpy() * 100  # Restore to original DSM scale
+                    # Convert prediction back to original DSM scale (default behavior)
+                    if not args.disable_normalization:
+                        pred_array = output[j, 0].cpu().detach().numpy() * 100  # Restore to original DSM scale
+                    else:
+                        pred_array = output[j, 0].cpu().detach().numpy()  # Raw model output for debugging
                     pred_filename = f"{image_names[prediction_idx]}_pred.npy"
                     pred_path = os.path.join(predictions_dir, pred_filename)
                     np.save(pred_path, pred_array)
@@ -193,6 +196,7 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
         totalNumber = totalNumber + batchSize
 
         errors = util.evaluateError(output, depth, i, batchSize, 
+                                    disable_normalization=args.disable_normalization,
                                     enable_clipping=args.enable_clipping, 
                                     clipping_threshold=args.clipping_threshold,
                                     enable_target_filtering=not args.disable_target_filtering,

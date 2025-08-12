@@ -42,7 +42,8 @@ def setNanToZero(input, target):
     return _input, _target, nanMask, nValidElement
 
 
-def evaluateError(output, target, idx, batches, enable_clipping=False, clipping_threshold=30.0, 
+def evaluateError(output, target, idx, batches, disable_normalization=False, 
+                  enable_clipping=False, clipping_threshold=30.0, 
                   enable_target_filtering=True, target_threshold=1.0):
 
     errors = {'MSE': 0, 'RMSE': 0, 'MAE': 0,'SSIM':0}
@@ -69,8 +70,10 @@ def evaluateError(output, target, idx, batches, enable_clipping=False, clipping_
      
         #cv2.imwrite(str(idx)+'_out.png',x)
         
-        output_0_1= output_0_1*100
-        target_0_1 = target_0_1*100
+        if not disable_normalization:
+            output_0_1= output_0_1*100
+            target_0_1 = target_0_1*100
+        # If disable_normalization=True, use raw model output values
 
 
         # Optional target filtering - enabled by default to maintain compatibility
