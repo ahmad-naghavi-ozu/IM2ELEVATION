@@ -6,6 +6,7 @@ from PIL import Image
 import pandas as pd
 from datetime import datetime
 import argparse
+from tqdm import tqdm
 
 class HeightRegressionMetrics(object):
     def __init__(self):
@@ -198,8 +199,12 @@ class HeightRegressionMetrics(object):
         
         evaluated_count = 0
         missing_predictions = []
+        resize_count = 0
         
-        for gt_file in gt_files:
+        # Create progress bar for evaluation
+        pbar = tqdm(gt_files, desc="Evaluating samples", unit="files")
+        
+        for gt_file in pbar:
             # Get image name for prediction file (remove extension to match prediction file naming)
             image_name = os.path.basename(gt_file['rgb_path'])
             image_name = os.path.splitext(image_name)[0]
@@ -230,12 +235,12 @@ class HeightRegressionMetrics(object):
                 # Ensure predictions and ground truth have same dimensions
                 # Follow the same preprocessing as training/testing: resize ground truth to 440x440
                 if gt_dsm.shape != (440, 440):
-                    print(f"Resizing ground truth DSM from {gt_dsm.shape} to (440, 440) for {image_name}")
                     gt_dsm = cv2.resize(gt_dsm, (440, 440), interpolation=cv2.INTER_LINEAR)
+                    resize_count += 1
                 
                 if gt_sem.shape != (440, 440):
-                    print(f"Resizing ground truth SEM from {gt_sem.shape} to (440, 440) for {image_name}")
                     gt_sem = cv2.resize(gt_sem, (440, 440), interpolation=cv2.INTER_NEAREST)
+                    resize_count += 1
                 
                 # Predictions should already be 440x440, but verify
                 if pred_dsm.shape != (440, 440):
@@ -263,17 +268,27 @@ class HeightRegressionMetrics(object):
                 self.add_batch(gt_dsm_batch, pred_dsm_batch, gt_sem, None)
                 evaluated_count += 1
                 
-                if evaluated_count % 10 == 0:
-                    print(f"Evaluated {evaluated_count} samples...")
+                # Update progress bar with current stats
+                pbar.set_postfix({
+                    'evaluated': evaluated_count,
+                    'resized': resize_count,
+                    'missing': len(missing_predictions)
+                })
                     
             except Exception as e:
-                print(f"Error evaluating {image_name}: {str(e)}")
+                pbar.write(f"Error evaluating {image_name}: {str(e)}")
                 continue
+        
+        # Close progress bar
+        pbar.close()
         
         if missing_predictions:
             print(f"Warning: {len(missing_predictions)} prediction files were missing")
             if len(missing_predictions) <= 10:
                 print("Missing predictions:", missing_predictions)
+        
+        if resize_count > 0:
+            print(f"Resized {resize_count} ground truth files from (512, 512) to (440, 440)")
         
         print(f"Successfully evaluated {evaluated_count} samples")
         
