@@ -7,12 +7,14 @@ set -e  # Exit on error
 
 # Default values
 DATASET_NAME="DFC2019_crp512_bin"
+DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2019_crp512_bin"
 MODEL_PATH=""
 GPU_IDS="1"
 BATCH_SIZE=1
 SKIP_PREDICTIONS=false
 FORCE_REGENERATE=false
 DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline
+USE_UINT16_CONVERSION=false  # Use uint16 conversion for depth data
 
 # Clipping options
 ENABLE_CLIPPING=false
@@ -55,12 +57,14 @@ Usage: $0 [OPTIONS]
 
 Options:
     -d, --dataset NAME          Dataset name (required)
+    -p, --dataset-path PATH     Full path to dataset directory (default: /home/asfand/Ahmad/datasets/DFC2019_crp512_bin)
     -m, --model-path PATH       Path to model directory (default: pipeline_output/DATASET_NAME)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1,2,3)
     -b, --batch-size NUM        Batch size for prediction generation (default: 3)
     --skip-predictions          Skip prediction generation (use existing predictions)
     --force-regenerate          Force regenerate predictions even if they exist
     --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
+    --uint16-conversion         Use uint16 conversion instead of float32 for depth data (original IM2ELEVATION format)
     -h, --help                  Show this help message
 
 Available datasets:
@@ -73,6 +77,9 @@ Available datasets:
 Examples:
     # Basic evaluation
     $0 --dataset DFC2023S
+
+    # Use specific dataset path
+    $0 --dataset DFC2023S --dataset-path /path/to/your/dataset
 
     # Custom model path and GPU settings
     $0 --dataset DFC2023S --model-path my_models/DFC2023S --gpu-ids 0,1
@@ -90,6 +97,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -d|--dataset)
             DATASET_NAME="$2"
+            shift 2
+            ;;
+        -p|--dataset-path)
+            DATASET_PATH="$2"
             shift 2
             ;;
         -m|--model-path)
@@ -114,6 +125,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --disable-normalization)
             DISABLE_NORMALIZATION=true
+            shift
+            ;;
+        --uint16-conversion)
+            USE_UINT16_CONVERSION=true
             shift
             ;;
         -h|--help)
@@ -157,6 +172,7 @@ print_status "=============================================="
 print_status "IM2ELEVATION Evaluation Pipeline Configuration"
 print_status "=============================================="
 print_status "Dataset:        $DATASET_NAME"
+print_status "Dataset Path:   $DATASET_PATH"
 print_status "Model Path:     $MODEL_PATH"
 print_status "CSV file:       $CSV_FILE"
 print_status "Batch Size:     $BATCH_SIZE"
@@ -166,6 +182,7 @@ print_status "Pipeline Steps:"
 print_status "  Generate Predictions: $([ "$SKIP_PREDICTIONS" == true ] && echo "SKIP" || echo "RUN")"
 print_status "  Force Regenerate:     $([ "$FORCE_REGENERATE" == true ] && echo "YES" || echo "NO")"
 print_status "  Disable Normalization: $([ "$DISABLE_NORMALIZATION" == true ] && echo "YES" || echo "NO")"
+print_status "  Use Uint16 Conversion: $([ "$USE_UINT16_CONVERSION" == true ] && echo "YES" || echo "NO")"
 print_status "  Evaluate Metrics:     RUN"
 print_status "=============================================="
 print_status ""
@@ -211,6 +228,9 @@ if [[ "$SKIP_PREDICTIONS" == false ]]; then
         PRED_CMD="python test.py --model \"$MODEL_PATH\" --csv \"$CSV_FILE\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
         if [[ "$DISABLE_NORMALIZATION" == true ]]; then
             PRED_CMD="$PRED_CMD --disable-normalization"
+        fi
+        if [[ "$USE_UINT16_CONVERSION" == true ]]; then
+            PRED_CMD="$PRED_CMD --uint16-conversion"
         fi
         
         # Note: GPU mode is automatically handled by test.py based on gpu-ids

@@ -45,6 +45,8 @@ parser.add_argument('--csv', default='')
 parser.add_argument('--model', default='')
 parser.add_argument('--disable-normalization', action='store_true', default=False,
                     help='disable entire normalization pipeline (x1000, /100000, x100) for raw model training (default: False)')
+parser.add_argument('--uint16-conversion', action='store_true', default=False,
+                    help='use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16) (default: False)')
 
 args = parser.parse_args()
 # Extract dataset name from path for model naming
@@ -113,7 +115,17 @@ def main():
     if args.start_epoch != 0:
         print(f"Loading checkpoint from {args.model}...")
         checkpoint = torch.load(args.model, map_location=f'cuda:{device_ids[0]}')
-        model.load_state_dict(checkpoint['state_dict'])
+        state_dict = checkpoint['state_dict']
+        
+        # Handle DataParallel state dict mismatch
+        if len(device_ids) > 1 and not any(key.startswith('module.') for key in state_dict.keys()):
+            # Model is DataParallel but checkpoint is not - add 'module.' prefix
+            state_dict = {'module.' + k: v for k, v in state_dict.items()}
+        elif len(device_ids) == 1 and any(key.startswith('module.') for key in state_dict.keys()):
+            # Model is not DataParallel but checkpoint is - remove 'module.' prefix
+            state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+        
+        model.load_state_dict(state_dict)
         print(f"Resumed from epoch {args.start_epoch}")
     
     batch_size = args.batch_size * len(device_ids)  # Scale batch size by number of GPUs
@@ -126,7 +138,7 @@ def main():
     #optimizer = torch.optim.SGD(model.parameters(), args.lr, weight_decay=args.weight_decay)
     optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
 
-    train_loader = loaddata.getTrainingData(batch_size, args.csv, dataset_name, args.disable_normalization)
+    train_loader = loaddata.getTrainingData(batch_size, args.csv, dataset_name, args.disable_normalization, args.uint16_conversion)
 
     logfolder = "runs/"+args.data 
     print(f"Training dataset: {os.path.basename(args.data)}")
