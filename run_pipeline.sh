@@ -8,18 +8,19 @@ set -e  # Exit on any error
 # Default values
 DATASET_NAME="DFC2019_crp512_bin"
 DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2019_crp512_bin"
-EPOCHS=50
+EPOCHS=100
 LEARNING_RATE=0.0001
 OUTPUT_DIR="pipeline_output"
 SKIP_CSV_GENERATION=false
 SKIP_TRAINING=false
 SKIP_TESTING=false
 SKIP_EVALUATION=false
-GPU_IDS="0"
-BATCH_SIZE=1 # Reduced default batch size to prevent OOM errors
+GPU_IDS="0,1"
+BATCH_SIZE=2 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
 FORCE_REGENERATE_PREDICTIONS=true  # Force regenerate predictions during evaluation
 DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline (x1000, /100000, x100)
+USE_UINT16_CONVERSION=false  # Use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16)
 
 # Clipping options for testing and evaluation
 ENABLE_CLIPPING=false
@@ -50,6 +51,7 @@ Options:
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
     --force-regenerate          Force regenerate predictions during evaluation
     --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
+    --use-uint16-conversion     Use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16)
     -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 1)
     
     Clipping Options (for testing and evaluation):
@@ -139,6 +141,10 @@ while [[ $# -gt 0 ]]; do
             DISABLE_NORMALIZATION=true
             shift
             ;;
+        --use-uint16-conversion)
+            USE_UINT16_CONVERSION=true
+            shift
+            ;;
         -b|--batch-size)
             BATCH_SIZE="$2"
             shift 2
@@ -216,6 +222,7 @@ fi
 
 echo "Auto Resume:    $AUTO_RESUME"
 echo "Disable Norm:   $DISABLE_NORMALIZATION"
+echo "Uint16 Conv:    $USE_UINT16_CONVERSION"
 echo ""
 
 # Check GPU memory status before starting (if utility available)
@@ -267,6 +274,7 @@ fi
     echo "  Batch Size: $BATCH_SIZE"
     echo "  Force Regenerate Predictions: $FORCE_REGENERATE_PREDICTIONS"
     echo "  Disable Normalization: $DISABLE_NORMALIZATION"
+    echo "  Use Uint16 Conversion: $USE_UINT16_CONVERSION"
     echo ""
 } > "$PIPELINE_LOG"
 
@@ -332,7 +340,7 @@ if [[ "$SKIP_TRAINING" == false ]]; then
     # Just reference it here
     
     # Check for existing checkpoints and auto-resume if enabled
-    RESUME_ARGS=""
+    RESUME_ARGS="--start_epoch 0"  # Default to epoch 0
     if [[ "$AUTO_RESUME" == true ]]; then
         # Look for latest checkpoint
         LATEST_CHECKPOINT=$(find "$DATASET_OUTPUT_DIR" -name "*_model_latest.pth.tar" 2>/dev/null | head -1)
@@ -359,14 +367,23 @@ except:
                 fi
             fi
         fi
+    else
+        # When auto-resume is disabled, always start from epoch 0
+        echo "Auto-resume disabled, starting training from scratch"
+        RESUME_ARGS="--start_epoch 0"
     fi
     
     # Build training command with GPU options and memory management
-    TRAIN_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS $RESUME_ARGS"
+    TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS $RESUME_ARGS"
     
     # Add normalization flag if enabled
     if [[ "$DISABLE_NORMALIZATION" == true ]]; then
         TRAIN_CMD="$TRAIN_CMD --disable-normalization"
+    fi
+    
+    # Add uint16 conversion flag if enabled
+    if [[ "$USE_UINT16_CONVERSION" == true ]]; then
+        TRAIN_CMD="$TRAIN_CMD --uint16-conversion"
     fi
     
     echo "Command: $TRAIN_CMD"
@@ -456,9 +473,14 @@ if [[ "$SKIP_TESTING" == false ]]; then
     fi
     
     # Build testing command with GPU options and memory management
-    TEST_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
+    TEST_CMD="python test.py --model $DATASET_OUTPUT_DIR --csv $TEST_CSV --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
     if [[ "$DISABLE_NORMALIZATION" == true ]]; then
         TEST_CMD="$TEST_CMD --disable-normalization"
+    fi
+    
+    # Add uint16 conversion flag if enabled
+    if [[ "$USE_UINT16_CONVERSION" == true ]]; then
+        TEST_CMD="$TEST_CMD --uint16-conversion"
     fi
     
     # Add clipping options
@@ -557,9 +579,14 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
     fi
     
     # Build evaluation command with memory management
-    EVAL_CMD="PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
+    EVAL_CMD="python test.py --model \"$DATASET_OUTPUT_DIR\" --csv \"$TEST_CSV\" --batch-size $BATCH_SIZE --save-predictions --gpu-ids $GPU_IDS"
     if [[ "$DISABLE_NORMALIZATION" == true ]]; then
         EVAL_CMD="$EVAL_CMD --disable-normalization"
+    fi
+    
+    # Add uint16 conversion flag if enabled
+    if [[ "$USE_UINT16_CONVERSION" == true ]]; then
+        EVAL_CMD="$EVAL_CMD --uint16-conversion"
     fi
     
     # Add clipping options

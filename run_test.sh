@@ -7,6 +7,7 @@ set -e  # Exit on any error
 
 # Default values
 DATASET_NAME="DFC2019_crp512_bin"
+DATASET_PATH="/home/asfand/Ahmad/datasets/DFC2019_crp512_bin"
 MODEL_BASE_DIR="pipeline_output"
 MODEL_DIR=""
 CSV_PATH=""
@@ -19,6 +20,7 @@ CLIPPING_THRESHOLD=30.0
 DISABLE_TARGET_FILTERING=false
 TARGET_THRESHOLD=1.0
 DISABLE_NORMALIZATION=false  # Disable entire normalization pipeline - default false
+USE_UINT16_CONVERSION=false  # Use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16)
 
 # Help function
 show_help() {
@@ -29,6 +31,7 @@ Usage: $0 [OPTIONS]
 
 Options:
     -d, --dataset NAME          Dataset name (default: Dublin)
+    -p, --dataset-path PATH     Full path to dataset directory (default: /home/asfand/Ahmad/datasets/DFC2019_crp512_bin)
     -b, --base-dir DIR          Base directory containing dataset subdirectories (default: pipeline_output)
     -m, --model-dir DIR         Specific model directory (overrides auto-detection)
     -c, --csv PATH              Path to test CSV file (auto-detected if not specified)
@@ -40,12 +43,16 @@ Options:
     --disable-target-filtering  Disable target-based filtering of predictions (enabled by default)
     --target-threshold NUM      Target height threshold for filtering predictions in meters (default: 1.0)
     --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
+    --use-uint16-conversion     Use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16)
     --no-save                   Don't save results to file (print to terminal only)
     -h, --help                  Show this help message
 
 Examples:
     # Basic testing with no clipping (default - allows full height range)
     $0 --dataset Dublin
+
+    # Use specific dataset path
+    $0 --dataset Dublin --dataset-path /path/to/your/dataset
 
     # Test with legacy clipping enabled (30m threshold)
     $0 --dataset Dublin --enable-clipping
@@ -66,6 +73,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -d|--dataset)
             DATASET_NAME="$2"
+            shift 2
+            ;;
+        -p|--dataset-path)
+            DATASET_PATH="$2"
             shift 2
             ;;
         -b|--base-dir)
@@ -110,6 +121,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --disable-normalization)
             DISABLE_NORMALIZATION=true
+            shift
+            ;;
+        --use-uint16-conversion)
+            USE_UINT16_CONVERSION=true
             shift
             ;;
         --no-save)
@@ -181,7 +196,95 @@ echo "======================================"
 echo "IM2ELEVATION Testing Configuration"
 echo "======================================"
 echo "Dataset:        $DATASET_NAME"
+echo "Dataset Path:   $DATASET_PATH"
 echo "Model Dir:      $MODEL_DIR"
 echo "Test CSV:       $CSV_PATH"
 echo "Model Files:    ${#MODEL_FILES[@]} checkpoints found"
 echo "Batch Size:     $BATCH_SIZE"
+echo "GPU Mode:       [$GPU_IDS]"
+echo "Disable Norm:   $DISABLE_NORMALIZATION"
+echo "Uint16 Conv:    $USE_UINT16_CONVERSION"
+echo "Enable Clipping: $ENABLE_CLIPPING"
+if [[ "$ENABLE_CLIPPING" == true ]]; then
+    echo "Clipping Threshold: $CLIPPING_THRESHOLD"
+fi
+echo "Target Filtering: $([ "$DISABLE_TARGET_FILTERING" == true ] && echo "DISABLED" || echo "ENABLED")"
+echo "Target Threshold: $TARGET_THRESHOLD"
+if [[ "$SAVE_RESULTS" == true ]]; then
+    echo "Output File:    $OUTPUT_FILE"
+fi
+echo "======================================"
+echo ""
+
+# Confirm before starting
+read -p "Start testing? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Testing cancelled."
+    exit 0
+fi
+
+# Build testing command
+TEST_CMD="python test.py --model \"$MODEL_DIR\" --csv \"$CSV_PATH\" --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS"
+
+# Add normalization flag
+if [[ "$DISABLE_NORMALIZATION" == true ]]; then
+    TEST_CMD="$TEST_CMD --disable-normalization"
+fi
+
+# Add uint16 conversion flag
+if [[ "$USE_UINT16_CONVERSION" == true ]]; then
+    TEST_CMD="$TEST_CMD --uint16-conversion"
+fi
+
+# Add clipping options
+if [[ "$ENABLE_CLIPPING" == true ]]; then
+    TEST_CMD="$TEST_CMD --enable-clipping --clipping-threshold $CLIPPING_THRESHOLD"
+fi
+
+if [[ "$DISABLE_TARGET_FILTERING" == true ]]; then
+    TEST_CMD="$TEST_CMD --disable-target-filtering"
+fi
+
+TEST_CMD="$TEST_CMD --target-threshold $TARGET_THRESHOLD"
+
+# Execute test command
+echo "Running test command:"
+echo "$TEST_CMD"
+echo ""
+
+if [[ "$SAVE_RESULTS" == true ]]; then
+    # Create results file header
+    {
+        echo "IM2ELEVATION Test Results"
+        echo "========================"
+        echo "Dataset: $DATASET_NAME"
+        echo "Model Dir: $MODEL_DIR"
+        echo "Test CSV: $CSV_PATH"
+        echo "Test Date: $(date)"
+        echo "Model Checkpoints: ${#MODEL_FILES[@]}"
+        echo "Batch Size: $BATCH_SIZE"
+        echo "GPU IDs: $GPU_IDS"
+        echo "Disable Normalization: $DISABLE_NORMALIZATION"
+        echo "Use Uint16 Conversion: $USE_UINT16_CONVERSION"
+        echo ""
+        echo "Results:"
+        echo "--------"
+    } > "$OUTPUT_FILE"
+    
+    eval "$TEST_CMD" 2>&1 | tee -a "$OUTPUT_FILE"
+    
+    echo ""
+    echo "======================================"
+    echo "Testing completed!"
+    echo "======================================"
+    echo "Results saved to: $OUTPUT_FILE"
+    echo "======================================"
+else
+    eval "$TEST_CMD"
+    
+    echo ""
+    echo "======================================"
+    echo "Testing completed!"
+    echo "======================================"
+fi

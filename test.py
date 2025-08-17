@@ -52,6 +52,8 @@ def main():
                         help='target height threshold for filtering predictions (default: 1.0 meters)')
     parser.add_argument('--disable-normalization', action='store_true', default=False,
                         help='disable entire normalization pipeline (x1000, /100000, x100) to see raw model outputs (default: False)')
+    parser.add_argument('--uint16-conversion', action='store_true', default=False,
+                        help='use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16) (default: False)')
     args = parser.parse_args()
     
     # Extract dataset name from model path for preprocessing
@@ -122,12 +124,20 @@ def main():
             print(f"Model moved to single GPU: {device_ids[0]}")
         state_dict = torch.load(selected_checkpoint, map_location=f'cuda:{device_ids[0]}')['state_dict']
         
+        # Handle DataParallel state dict mismatch
+        if len(device_ids) > 1 and not any(key.startswith('module.') for key in state_dict.keys()):
+            # Model is DataParallel but checkpoint is not - add 'module.' prefix
+            state_dict = {'module.' + k: v for k, v in state_dict.items()}
+        elif len(device_ids) == 1 and any(key.startswith('module.') for key in state_dict.keys()):
+            # Model is not DataParallel but checkpoint is - remove 'module.' prefix
+            state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+        
         # Load state dict quietly without printing parameter names
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model.load_state_dict(state_dict, strict=False)
 
-    test_loader = loaddata.getTestingData(args.batch_size, args.csv, dataset_name, disable_normalization=args.disable_normalization)
+    test_loader = loaddata.getTestingData(args.batch_size, args.csv, dataset_name, disable_normalization=args.disable_normalization, use_uint16_conversion=args.uint16_conversion)
     result = test(test_loader, model, args, checkpoint_name, predictions_dir, args.csv)
     
     print("=" * 60)
