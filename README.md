@@ -147,25 +147,41 @@ conda activate im2elevation
 pip install pytorch-ssim tensorboard --no-cache-dir
 ```
 
-### Training
+### Shell Scripts (Recommended)
 ```bash
-python train.py --data output_folder --csv path/to/training.csv --epochs 100
+# Training with auto-configuration
+./run_train.sh --dataset DFC2019_crp512_bin --epochs 100
+
+# Testing with comprehensive options
+./run_test.sh --dataset DFC2019_crp512_bin --batch-size 1
+
+# Complete evaluation pipeline
+./run_eval.sh --dataset DFC2019_crp512_bin --force-regenerate
 ```
 
-### Testing
+### Direct Python Usage
 ```bash
-# Standard model testing
-python test.py --model path/to/model_folder --csv path/to/test.csv --outfile results.txt
+# Training
+python train.py --data pipeline_output/dataset_name --csv dataset/train_dataset.csv --epochs 100
 
-# Enhanced testing with prediction saving for evaluation
-python test.py --model path/to/model_folder --csv path/to/test.csv --save-predictions
+# Testing with uint16 conversion (original IM2ELEVATION format)
+python test.py --model pipeline_output/dataset_name --csv dataset/test_dataset.csv --uint16-conversion
+
+# Evaluation
+python evaluate.py --predictions-dir pipeline_output/dataset_name/predictions --csv-file dataset/test_dataset.csv
 ```
 
-### Evaluation
-```bash
-# Run comprehensive evaluation on saved predictions
-python evaluate.py --predictions-dir pipeline_output/dataset_name/predictions --csv-file dataset/test_dataset_name.csv --dataset-name dataset_name
-```
+## 🔧 New Features & Enhancements
+
+### Original IM2ELEVATION Compatibility
+- **`--uint16-conversion`**: Enables original depth format `depth = (depth*1000).astype(np.uint16)`
+- **`--disable-normalization`**: Bypasses normalization pipeline for raw model analysis
+- **Multi-GPU Compatibility**: Seamless checkpoint loading between single/multi-GPU configurations
+
+### Enhanced Pipeline Scripts
+- **Auto-resume**: Intelligent checkpoint detection and resume functionality
+- **Unified Directory Structure**: Consistent `pipeline_output/` organization across all scripts
+- **Flexible Configuration**: Comprehensive command-line options for all training/testing scenarios
 
 ## 🔍 Evaluation Methodology
 
@@ -310,6 +326,14 @@ We welcome contributions! Please see our environment setup guide in `tools/envir
 ## 📞 Contact
 
 For questions about the implementation or dataset, please refer to the original paper or create an issue in this repository.
+
+## 🙏 Acknowledgments
+
+This implementation is forked from [speed8928/IMELE](https://github.com/speed8928/IMELE) with significant enhancements including:
+- Enhanced shell script pipeline with auto-configuration
+- Original IM2ELEVATION uint16 conversion compatibility  
+- Multi-GPU checkpoint compatibility and improved error handling
+- Comprehensive evaluation system with detailed metrics reporting
 
 ---
 
