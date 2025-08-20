@@ -34,7 +34,7 @@ IM2ELEVATION Training Script
 Usage: $0 [OPTIONS]
 
 Options:
-    -d, --dataset NAME          Dataset name (default: DFC2023Amini)
+    -d, --dataset NAME          Dataset name (default: DFC2023mini)
     -p, --dataset-path PATH     Full path to dataset directory (default: /home/asfand/Ahmad/datasets/DFC2019_crp512_bin)
     -e, --epochs NUM            Number of epochs to train (default: 100)
     -lr, --learning-rate RATE   Learning rate (default: 0.0001)
@@ -57,19 +57,19 @@ Options:
 
 Examples:
     # Basic training
-    $0 --dataset DFC2023Amini --epochs 50
+    $0 --dataset DFC2023mini --epochs 50
 
     # Use specific dataset path
-    $0 --dataset DFC2023Amini --dataset-path /path/to/your/dataset --epochs 50
+    $0 --dataset DFC2023mini --dataset-path /path/to/your/dataset --epochs 50
 
     # Use specific GPUs
-    $0 --dataset DFC2023Amini --epochs 50 --gpu-ids "0,1"
+    $0 --dataset DFC2023mini --epochs 50 --gpu-ids "0,1"
 
     # Single GPU training
-    $0 --dataset DFC2023Amini --epochs 50 --gpu-ids "0"
+    $0 --dataset DFC2023mini --epochs 50 --gpu-ids "0"
 
     # Resume training from epoch 30
-    $0 --dataset DFC2023Amini --resume 30 --model pipeline_output/DFC2023Amini/DFC2023Amini_model_29.pth.tar
+    $0 --dataset DFC2023mini --resume 30 --model pipeline_output/DFC2023mini/DFC2023mini_model_29.pth.tar
 
     # Custom learning rate and output directory
     $0 --dataset contest --epochs 100 --learning-rate 0.0005 --output my_models
