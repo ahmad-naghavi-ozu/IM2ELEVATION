@@ -64,7 +64,7 @@ Options:
 
 Examples:
     # Full pipeline with evaluation
-    $0 --dataset DFC2023Amini --dataset-path /path/to/DFC2023Amini --epochs 50
+    $0 --dataset DFC2023mini --dataset-path /path/to/DFC2023mini --epochs 50
 
     # Skip CSV generation and use existing files
     $0 --dataset contest --skip-csv --epochs 100
@@ -73,7 +73,7 @@ Examples:
     $0 --dataset mydata --dataset-path /path/to/mydata --skip-training --skip-testing --skip-evaluation
 
     # Only test and evaluate existing models
-    $0 --dataset DFC2023Amini --skip-csv --skip-training
+    $0 --dataset DFC2023mini --skip-csv --skip-training
 
     # Use specific GPU (single GPU automatically detected)
     $0 --dataset DFC2023S --gpu-ids 2
