@@ -47,6 +47,10 @@ parser.add_argument('--disable-normalization', action='store_true', default=Fals
                     help='disable entire normalization pipeline (x1000, /100000, x100) for raw model training (default: False)')
 parser.add_argument('--uint16-conversion', action='store_true', default=False,
                     help='use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16) (default: False)')
+parser.add_argument('--fast-validation', action='store_true', default=True,
+                    help='use fast in-process validation instead of full test evaluation every epoch (default: True)')
+parser.add_argument('--full-test-frequency', default=5, type=int,
+                    help='run full test evaluation every N epochs when fast validation is enabled (default: 5)')
 
 args = parser.parse_args()
 # Extract dataset name from path for model naming
@@ -203,10 +207,42 @@ def main():
         # Train and get average loss for this epoch
         avg_loss = train(train_loader, model, optimizer, epoch, writer)
         
-        # Evaluate on test set to select best model (like original authors did)
+        # Initialize validation variables
+        val_rmse = float('inf')
+        val_l1 = float('inf')
+        
+        # Fast validation for quick feedback (new optimization)
+        if use_test_evaluation and args.fast_validation:
+            val_rmse, val_l1 = run_fast_validation(model, test_csv, dataset_name, epoch, device_ids[0], args)
+            log_and_print(f"🚀 Quick Validation - Epoch {epoch}: RMSE={val_rmse:.4f}, L1={val_l1:.4f}")
+        
+        # Full test evaluation for accurate model selection
+        run_full_test = False
         if use_test_evaluation:
-            test_rmse = run_test_evaluation(model, test_csv, dataset_name, epoch, device_ids)
-            
+            if args.fast_validation:
+                # Run full test evaluation in these cases:
+                # 1. Every N epochs (configurable)
+                # 2. Last epoch
+                # 3. Early epochs (0-4) for initial assessment
+                # 4. When fast validation shows significant improvement
+                if (epoch % args.full_test_frequency == 0 or 
+                    epoch == args.epochs - 1 or 
+                    epoch < 5 or
+                    (epoch > 0 and val_rmse < best_rmse * 0.95)):  # 5% improvement threshold
+                    run_full_test = True
+                    log_and_print(f"⏱️  Running full test evaluation for epoch {epoch}...")
+                    test_rmse = run_test_evaluation(model, test_csv, dataset_name, epoch, device_ids)
+                else:
+                    # Use fast validation RMSE for non-full-test epochs
+                    test_rmse = val_rmse
+                    log_and_print(f"📊 Using fast validation RMSE for epoch {epoch}: {test_rmse:.4f}")
+            else:
+                # Original behavior: full test evaluation every epoch
+                run_full_test = True
+                test_rmse = run_test_evaluation(model, test_csv, dataset_name, epoch, device_ids)
+        
+        # Save checkpoint based on test results
+        if use_test_evaluation:
             # Save checkpoint if this is the best model so far based on test RMSE
             if test_rmse < best_rmse:
                 best_rmse = test_rmse
@@ -220,9 +256,11 @@ def main():
                 # Save new best checkpoint
                 best_model_path = save_model + f'best_epoch_{epoch}.pth.tar'
                 modelname = save_checkpoint({'state_dict': model.state_dict(), 'epoch': epoch, 'loss': avg_loss}, best_model_path)
-                log_and_print(f"🏆 NEW BEST! Epoch {epoch}, Test RMSE: {test_rmse:.4f} (Train Loss: {avg_loss:.4f})")
+                test_type = "Full Test" if run_full_test else "Fast Val"
+                log_and_print(f"🏆 NEW BEST! Epoch {epoch}, {test_type} RMSE: {test_rmse:.4f} (Train Loss: {avg_loss:.4f})")
             else:
-                log_and_print(f"Epoch {epoch}, Train Loss: {avg_loss:.4f}, Test RMSE: {test_rmse:.4f} (Best: {best_rmse:.4f} at epoch {best_epoch})")
+                test_type = "Full Test" if run_full_test else "Fast Val"
+                log_and_print(f"Epoch {epoch}, Train Loss: {avg_loss:.4f}, {test_type} RMSE: {test_rmse:.4f} (Best: {best_rmse:.4f} at epoch {best_epoch})")
         else:
             # Fallback to training loss if test data not available
             if avg_loss < best_loss:
@@ -376,6 +414,71 @@ class AverageMeter(object):
 def save_checkpoint(state, filename='test.pth.tar'):
     torch.save(state, filename)
     return filename
+
+
+def run_fast_validation(model, test_csv, dataset_name, epoch, device, args):
+    """
+    Fast in-process validation for quick epoch-to-epoch feedback.
+    Uses a subset of test data without subprocess overhead.
+    """
+    # Create validation loader once and cache it
+    if not hasattr(run_fast_validation, 'val_loader'):
+        print(f"Creating fast validation loader for {dataset_name}...")
+        val_dataset = loaddata.getTestingData(
+            batch_size=2,  # Small batch for speed
+            csv=test_csv, 
+            dataset_name=dataset_name,
+            disable_normalization=args.disable_normalization,
+            use_uint16_conversion=args.uint16_conversion
+        )
+        run_fast_validation.val_loader = val_dataset
+        print(f"Fast validation loader created with {len(val_dataset.dataset)} samples")
+    
+    val_loader = run_fast_validation.val_loader
+    
+    # Switch to evaluation mode
+    was_training = model.training
+    model.eval()
+    
+    total_loss = 0
+    total_l1_loss = 0
+    num_batches = 0
+    max_batches = min(20, len(val_loader))  # Quick validation on subset (20 batches max)
+    
+    criterion = nn.L1Loss()
+    
+    with torch.no_grad():
+        for i, sample_batched in enumerate(val_loader):
+            if num_batches >= max_batches:
+                break
+                
+            image, depth = sample_batched['image'], sample_batched['depth']
+            image = image.to(device, non_blocking=True)
+            depth = depth.to(device, non_blocking=True)
+            
+            # Forward pass
+            output = model(image)
+            output = torch.nn.functional.interpolate(output, size=(440, 440), mode='bilinear')
+            
+            # Compute losses (similar to training but without gradients)
+            l1_loss = criterion(output, depth)
+            
+            # Simple RMSE computation
+            mse = torch.mean((output - depth) ** 2)
+            rmse = torch.sqrt(mse)
+            
+            total_loss += rmse.item()
+            total_l1_loss += l1_loss.item()
+            num_batches += 1
+    
+    # Restore training mode if it was training before
+    if was_training:
+        model.train()
+    
+    avg_rmse = total_loss / max(num_batches, 1)
+    avg_l1 = total_l1_loss / max(num_batches, 1)
+    
+    return avg_rmse, avg_l1
 
 
 def run_test_evaluation(model, test_csv, dataset_name, epoch, device_ids):

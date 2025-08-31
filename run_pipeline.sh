@@ -376,6 +376,9 @@ except:
     # Build training command with GPU options and memory management
     TRAIN_CMD="python train.py --data $DATASET_OUTPUT_DIR --csv $TRAIN_CSV --epochs $EPOCHS --lr $LEARNING_RATE --batch-size $BATCH_SIZE --gpu-ids $GPU_IDS $RESUME_ARGS"
     
+    # Add fast validation optimization (enabled by default for performance)
+    TRAIN_CMD="$TRAIN_CMD --fast-validation --full-test-frequency 5"
+    
     # Add normalization flag if enabled
     if [[ "$DISABLE_NORMALIZATION" == true ]]; then
         TRAIN_CMD="$TRAIN_CMD --disable-normalization"

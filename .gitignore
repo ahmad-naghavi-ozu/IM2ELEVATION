@@ -7,6 +7,7 @@
 
 # Documents folder (contains original manuscript/papers)
 documents/
+visualization/
 
 # PDF processor tool (utility folder)
 tools/pdf_processor/
