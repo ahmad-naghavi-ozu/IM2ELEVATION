@@ -143,7 +143,7 @@ def generate_csv_for_split(dataset_root, split_name, output_dir, dataset_name, r
     # Write CSV file
     with open(csv_path, 'w') as f:
         for rgb_path, dsm_path in matched_pairs:
-            f.write(f"{rgb_path},{dsm_path}\n")
+            f.write(f"{rgb_path};{dsm_path}\n")
     
     print(f"Generated {csv_filename} with {len(matched_pairs)} file pairs")
 
@@ -219,7 +219,7 @@ def combine_train_valid_splits(dataset_root, output_dir, dataset_name, rgb_patte
     
     with open(csv_path, 'w') as f:
         for rgb_path, dsm_path in all_pairs:
-            f.write(f"{rgb_path},{dsm_path}\n")
+            f.write(f"{rgb_path};{dsm_path}\n")
     
     print(f"Generated combined {csv_filename} with {len(all_pairs)} total file pairs")
 

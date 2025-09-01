@@ -12,7 +12,7 @@ class depthDataset(Dataset):
     """Face Landmarks dataset."""
 
     def __init__(self, csv_file, transform=None, disable_normalization=False, use_uint16_conversion=False):
-        self.frame = pd.read_csv(csv_file, header=None)
+        self.frame = pd.read_csv(csv_file, header=None, sep=';')
         self.transform = transform
         self.disable_normalization = disable_normalization
         self.use_uint16_conversion = use_uint16_conversion
