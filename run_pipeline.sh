@@ -18,7 +18,6 @@ SKIP_EVALUATION=false
 GPU_IDS="0,1"
 BATCH_SIZE=2 # Reduced default batch size to prevent OOM errors
 AUTO_RESUME=true  # Automatically resume from latest checkpoint if available
-FORCE_REGENERATE_PREDICTIONS=true  # Force regenerate predictions during evaluation
 DISABLE_NORMALIZATION=true  # Disable entire normalization pipeline (x1000, /100000, x100)
 USE_UINT16_CONVERSION=false  # Use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16)
 
@@ -49,7 +48,6 @@ Options:
     --skip-evaluation           Skip evaluation (only generate CSV, train, and test)
     --gpu-ids IDS               Comma-separated list of GPU IDs to use (default: 0,1)
     --no-resume                 Start training from scratch (don't auto-resume from checkpoints)
-    --force-regenerate          Force regenerate predictions during evaluation
     --disable-normalization     Disable entire normalization pipeline (x1000, /100000, x100) for raw model analysis
     --use-uint16-conversion     Use original IM2ELEVATION uint16 conversion: depth = (depth*1000).astype(np.uint16)
     -b, --batch-size NUM        Batch size per GPU for training, total batch size for testing (default: 1)
@@ -80,9 +78,6 @@ Examples:
 
     # Use multiple GPUs (multi-GPU automatically detected)
     $0 --dataset DFC2023S --gpu-ids 0,1,2
-
-    # Force regenerate predictions during evaluation
-    $0 --dataset DFC2023S --force-regenerate
 EOF
 }
 
@@ -131,10 +126,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-resume)
             AUTO_RESUME=false
-            shift
-            ;;
-        --force-regenerate)
-            FORCE_REGENERATE_PREDICTIONS=true
             shift
             ;;
         --disable-normalization)
@@ -272,7 +263,6 @@ fi
     echo "  Skip Evaluation: $SKIP_EVALUATION"
     echo "  GPU IDs: $GPU_IDS"
     echo "  Batch Size: $BATCH_SIZE"
-    echo "  Force Regenerate Predictions: $FORCE_REGENERATE_PREDICTIONS"
     echo "  Disable Normalization: $DISABLE_NORMALIZATION"
     echo "  Use Uint16 Conversion: $USE_UINT16_CONVERSION"
     echo ""
@@ -612,29 +602,25 @@ if [[ "$SKIP_EVALUATION" == false ]]; then
         echo ""
     } >> "$PIPELINE_LOG"
     
-    # Step 4a: Generate predictions (if not already exist or if forced)
+    # Step 4a: Generate predictions (always regenerate by default)
     PREDICTIONS_DIR="${DATASET_OUTPUT_DIR}/predictions"
     PREDICTION_SUCCESS=false
-    if [[ "$FORCE_REGENERATE_PREDICTIONS" == true ]] || [[ ! -d "$PREDICTIONS_DIR" ]] || [[ -z "$(ls -A $PREDICTIONS_DIR 2>/dev/null)" ]]; then
-        if [[ "$FORCE_REGENERATE_PREDICTIONS" == true ]] && [[ -d "$PREDICTIONS_DIR" ]]; then
-            echo "Force regenerating predictions, removing existing directory..."
-            rm -rf "$PREDICTIONS_DIR"
-        fi
-        
-        echo "Generating predictions for evaluation..."
-        eval "$EVAL_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
-        
-        if [[ $? -eq 0 ]]; then
-            PREDICTION_SUCCESS=true
-            echo "Prediction generation completed!"
-        else
-            echo "ERROR: Prediction generation failed!"
-            exit 1
-        fi
-    else
-        echo "Predictions directory already exists and contains files"
-        echo "Skipping prediction generation. Use --force-regenerate to overwrite"
+    
+    # Always regenerate - delete existing predictions if they exist
+    if [[ -d "$PREDICTIONS_DIR" ]] && [[ -n "$(ls -A $PREDICTIONS_DIR 2>/dev/null)" ]]; then
+        echo "Predictions directory exists. Removing and regenerating..."
+        rm -rf "$PREDICTIONS_DIR"
+    fi
+    
+    echo "Generating predictions for evaluation..."
+    eval "$EVAL_CMD" 2>&1 | tee -a "$PIPELINE_LOG"
+    
+    if [[ $? -eq 0 ]]; then
         PREDICTION_SUCCESS=true
+        echo "Prediction generation completed!"
+    else
+        echo "ERROR: Prediction generation failed!"
+        exit 1
     fi
     
     # Step 4b: Run evaluation metrics

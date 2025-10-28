@@ -25,8 +25,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 parser = argparse.ArgumentParser(description='PyTorch DenseNet Training')
-parser.add_argument('--epochs', default=100
-    , type=int,
+parser.add_argument('--epochs', default=100, type=int,
                     help='number of total epochs to run')
 parser.add_argument('--start_epoch', default=0, type=int,
                     help='manual epoch number (useful on restarts)')
