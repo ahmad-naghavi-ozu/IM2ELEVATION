@@ -226,7 +226,7 @@ def combine_train_valid_splits(dataset_root, output_dir, dataset_name, rgb_patte
 
 def main():
     parser = argparse.ArgumentParser(description='Generate CSV files for structured datasets')
-    parser.add_argument('dataset_path', help='Path to the dataset root directory')
+    parser.add_argument('--dataset-path', '-p', required=True, help='Path to the dataset root directory')
     parser.add_argument('--dataset-name', '-n', help='Name of the dataset (for CSV filenames)')
     parser.add_argument('--output-dir', '-o', default='./dataset', 
                        help='Output directory for CSV files (default: ./dataset)')

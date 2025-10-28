@@ -252,6 +252,42 @@ if [[ -z "$CSV_PATH" ]]; then
     CSV_PATH="./dataset/test_${DATASET_NAME}.csv"
 fi
 
+# Auto-generate CSV if it doesn't exist
+if [[ ! -f "$CSV_PATH" ]]; then
+    print_status "=========================================="
+    print_warning "Test CSV not found: $CSV_PATH"
+    print_status "Attempting to auto-generate CSV files..."
+    print_status "=========================================="
+    
+    # Check if dataset path exists
+    if [[ ! -d "$DATASET_PATH" ]]; then
+        print_error "Dataset path does not exist: $DATASET_PATH"
+        print_error "Please provide a valid dataset path using --dataset-path option"
+        exit 1
+    fi
+    
+    # Generate CSV files
+    CSV_GEN_CMD="python generate_dataset_csv.py --dataset-path \"$DATASET_PATH\" --dataset-name \"$DATASET_NAME\" --output-dir ./dataset"
+    print_status "Running: $CSV_GEN_CMD"
+    
+    if eval "$CSV_GEN_CMD"; then
+        print_success "CSV generation successful!"
+    else
+        print_error "Failed to generate CSV files"
+        exit 1
+    fi
+    
+    # Verify CSV was created
+    if [[ ! -f "$CSV_PATH" ]]; then
+        print_error "CSV file still not found after generation: $CSV_PATH"
+        print_error "Available CSV files:"
+        ls -la ./dataset/test_*.csv 2>/dev/null || print_error "No test CSV files found in ./dataset/"
+        exit 1
+    fi
+    print_status "=========================================="
+    print_status ""
+fi
+
 # Validate CSV file
 if [[ ! -f "$CSV_PATH" ]]; then
     print_error "Test CSV file not found: $CSV_PATH"

@@ -164,12 +164,40 @@ if [[ -z "$CSV_PATH" ]]; then
     CSV_PATH="./dataset/train_${DATASET_NAME}.csv"
 fi
 
-# Validate inputs
+# Auto-generate CSV if it doesn't exist
 if [[ ! -f "$CSV_PATH" ]]; then
-    echo "Error: Training CSV file not found: $CSV_PATH"
-    echo "Available CSV files:"
-    ls -la ./dataset/train_*.csv 2>/dev/null || echo "No training CSV files found in ./dataset/"
-    exit 1
+    echo "======================================"
+    echo "Training CSV not found: $CSV_PATH"
+    echo "Attempting to auto-generate CSV files..."
+    echo "======================================"
+    
+    # Check if dataset path exists
+    if [[ ! -d "$DATASET_PATH" ]]; then
+        echo "Error: Dataset path does not exist: $DATASET_PATH"
+        echo "Please provide a valid dataset path using --dataset-path option"
+        exit 1
+    fi
+    
+    # Generate CSV files
+    CSV_GEN_CMD="python generate_dataset_csv.py --dataset-path \"$DATASET_PATH\" --dataset-name \"$DATASET_NAME\" --output-dir ./dataset"
+    echo "Running: $CSV_GEN_CMD"
+    
+    if eval "$CSV_GEN_CMD"; then
+        echo "CSV generation successful!"
+    else
+        echo "Error: Failed to generate CSV files"
+        exit 1
+    fi
+    
+    # Verify CSV was created
+    if [[ ! -f "$CSV_PATH" ]]; then
+        echo "Error: CSV file still not found after generation: $CSV_PATH"
+        echo "Available CSV files:"
+        ls -la ./dataset/train_*.csv 2>/dev/null || echo "No training CSV files found in ./dataset/"
+        exit 1
+    fi
+    echo "======================================"
+    echo ""
 fi
 
 if [[ $RESUME_EPOCH -gt 0 && -z "$RESUME_MODEL" ]]; then
