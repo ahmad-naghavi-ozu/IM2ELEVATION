@@ -25,6 +25,7 @@ class HeightRegressionMetrics(object):
         self.delta1_sum = 0.0
         self.delta2_sum = 0.0
         self.delta3_sum = 0.0
+        self.r2_sum = 0.0
         self.total_samples = 0
         self.img_sample = 0
         self.count_mid_rise = 0
@@ -113,6 +114,12 @@ class HeightRegressionMetrics(object):
         self.delta2_sum += (maxRatio < 1.25 ** 2).mean()
         self.delta3_sum += (maxRatio < 1.25 ** 3).mean()
         
+        # R² SCORE - Compute per sample using original (non-eps) values
+        from util import r2_score
+        r2 = r2_score(gt_image[0], pre_image[0])  # Assuming single channel [1, H, W]
+        if r2 is not None:
+            self.r2_sum += r2
+        
         self.img_sample += 1
 
     def calculate_metrics(self):
@@ -136,8 +143,9 @@ class HeightRegressionMetrics(object):
         delta1 = self.delta1_sum / self.img_sample
         delta2 = self.delta2_sum / self.img_sample
         delta3 = self.delta3_sum / self.img_sample
+        r2 = self.r2_sum / self.img_sample
         
-        return mse, rmse, rmse_building, high_rise_rmse, mid_rise_rmse, low_rise_rmse, mae, delta1, delta2, delta3
+        return mse, rmse, rmse_building, high_rise_rmse, mid_rise_rmse, low_rise_rmse, mae, delta1, delta2, delta3, r2
 
     def evaluate_from_saved_predictions(self, predictions_dir, csv_file, dataset_name,
                                       enable_clipping=False, clipping_threshold=30.0,
@@ -298,7 +306,7 @@ class HeightRegressionMetrics(object):
         
         # Calculate final metrics using original method
         results = self.calculate_metrics()
-        mse, rmse, rmse_building, high_rise_rmse, mid_rise_rmse, low_rise_rmse, mae, delta1, delta2, delta3 = results
+        mse, rmse, rmse_building, high_rise_rmse, mid_rise_rmse, low_rise_rmse, mae, delta1, delta2, delta3, r2 = results
         
         metrics_dict = {
             'evaluated_samples': evaluated_count,
@@ -311,7 +319,8 @@ class HeightRegressionMetrics(object):
             'mae': mae,
             'delta1': delta1,
             'delta2': delta2,
-            'delta3': delta3
+            'delta3': delta3,
+            'r2': r2
         }
         
         return metrics_dict
@@ -340,6 +349,7 @@ class HeightRegressionMetrics(object):
         print(f"MSE: {metrics_dict['mse']:.4f}")
         print(f"RMSE: {metrics_dict['rmse']:.4f}")
         print(f"MAE: {metrics_dict['mae']:.4f}")
+        print(f"R²: {metrics_dict['r2']:.4f}")
         print(f"RMSE Building: {metrics_dict['rmse_building']:.4f}")
         print(f"High-rise RMSE: {metrics_dict['high_rise_rmse']:.4f}")
         print(f"Mid-rise RMSE: {metrics_dict['mid_rise_rmse']:.4f}")
@@ -365,6 +375,7 @@ class HeightRegressionMetrics(object):
             f.write(f"MSE: {metrics_dict['mse']:.4f}\n")
             f.write(f"RMSE: {metrics_dict['rmse']:.4f}\n")
             f.write(f"MAE: {metrics_dict['mae']:.4f}\n")
+            f.write(f"R²: {metrics_dict['r2']:.4f}\n")
             f.write(f"RMSE Building: {metrics_dict['rmse_building']:.4f}\n")
             f.write(f"High-rise RMSE: {metrics_dict['high_rise_rmse']:.4f}\n")
             f.write(f"Mid-rise RMSE: {metrics_dict['mid_rise_rmse']:.4f}\n")

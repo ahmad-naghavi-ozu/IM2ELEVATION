@@ -151,7 +151,7 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
     device = next(model.parameters()).device
     
     totalNumber = 0
-    errorSum = {'MSE': 0, 'RMSE': 0, 'MAE': 0,'SSIM':0}
+    errorSum = {'MSE': 0, 'RMSE': 0, 'MAE': 0, 'SSIM': 0, 'R2': 0}
 
     # Read CSV file to get image names for saving predictions
     image_names = []
@@ -224,9 +224,9 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
     # Enhanced output with checkpoint identification
     checkpoint_info = f" ({checkpoint_name})" if checkpoint_name else ""
     print(f'Results{checkpoint_info}:')
-    print('  Loss: {loss:.4f} | MSE: {mse:.4f} | RMSE: {rmse:.4f} | MAE: {mae:.4f} | SSIM: {ssim:.4f}'.format(
+    print('  Loss: {loss:.4f} | MSE: {mse:.4f} | RMSE: {rmse:.4f} | MAE: {mae:.4f} | SSIM: {ssim:.4f} | R²: {r2:.4f}'.format(
         loss=loss, mse=averageError['MSE'], rmse=averageError['RMSE'], 
-        mae=averageError['MAE'], ssim=averageError['SSIM']))
+        mae=averageError['MAE'], ssim=averageError['SSIM'], r2=averageError['R2']))
     
     if predictions_dir:
         print(f"Saved {prediction_idx} predictions to {predictions_dir}")
@@ -237,7 +237,8 @@ def test(test_loader, model, args, checkpoint_name="", predictions_dir=None, csv
         'MSE': averageError['MSE'],
         'RMSE': averageError['RMSE'], 
         'MAE': averageError['MAE'],
-        'SSIM': averageError['SSIM']
+        'SSIM': averageError['SSIM'],
+        'R2': averageError['R2']
     }
 
 

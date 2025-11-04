@@ -6,6 +6,44 @@ import pytorch_ssim
 from PIL import Image
 import cv2
 import torch
+
+def r2_score(y, yhat, eps=1e-8):
+    """
+    Compute the coefficient of determination (R²) for regression tasks.
+    
+    R² represents the proportion of variance in the dependent variable that is 
+    predictable from the independent variable(s). It ranges from -∞ to 1, where:
+    - 1.0 indicates perfect prediction
+    - 0.0 indicates the model performs no better than a horizontal line at the mean
+    - Negative values indicate the model performs worse than the mean
+    
+    Args:
+        y (np.ndarray): Ground truth values (1D or 2D array)
+        yhat (np.ndarray): Predicted values (1D or 2D array)
+        eps (float): Small epsilon value to avoid division by zero
+        
+    Returns:
+        float: R² score computed across all pixels, or None if input is empty
+    """
+    # Flatten arrays to ensure 1D computation across all pixels
+    y_flat = y.flatten()
+    yhat_flat = yhat.flatten()
+    
+    if y_flat.size == 0:
+        return None
+    
+    # Residual sum of squares
+    ss_res = np.sum((y_flat - yhat_flat) ** 2)
+    
+    # Total sum of squares
+    ss_tot = np.sum((y_flat - np.mean(y_flat)) ** 2)
+    
+    # Handle edge case where all ground truth values are the same
+    if ss_tot < eps:
+        return 0.0
+    
+    return 1.0 - ss_res / (ss_tot + eps)
+
 def lg10(x):
     return torch.div(torch.log(x), math.log(10))
 
@@ -46,7 +84,7 @@ def evaluateError(output, target, idx, batches, disable_normalization=False,
                   enable_clipping=False, clipping_threshold=30.0, 
                   enable_target_filtering=True, target_threshold=1.0):
 
-    errors = {'MSE': 0, 'RMSE': 0, 'MAE': 0,'SSIM':0}
+    errors = {'MSE': 0, 'RMSE': 0, 'MAE': 0, 'SSIM': 0, 'R2': 0}
                                                                                                                                                                                                                                                                                                                                                                     
     _output, _target, nanMask, nValidElement = setNanToZero(output, target)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -156,11 +194,12 @@ def evaluateError(output, target, idx, batches, disable_normalization=False,
             return window
         
         errors['SSIM'] = custom_ssim(_output, _target)
-       
-       
-
-       
-       
+        
+        # Compute R² score using numpy arrays (before converting to torch tensors)
+        output_np = output_0_1.cpu().detach().numpy() if isinstance(output_0_1, torch.Tensor) else output_0_1
+        target_np = target_0_1.cpu().detach().numpy() if isinstance(target_0_1, torch.Tensor) else target_0_1
+        r2 = r2_score(target_np, output_np)
+        errors['R2'] = r2 if r2 is not None else 0.0
 
         errors['MSE'] = float(errors['MSE'].data.cpu().numpy())
         errors['SSIM'] = float(errors['SSIM'].data.cpu().numpy())
@@ -174,17 +213,18 @@ def addErrors(errorSum, errors, batchSize):
     errorSum['MSE']=errorSum['MSE'] + errors['MSE'] * batchSize
     errorSum['SSIM']=errorSum['SSIM'] + errors['SSIM'] * batchSize
     errorSum['MAE']=errorSum['MAE'] + errors['MAE'] * batchSize
+    errorSum['R2']=errorSum['R2'] + errors['R2'] * batchSize
 
     return errorSum
 
 
 def averageErrors(errorSum, N):
 
-    averageError= {'MSE': 0, 'RMSE': 0, 'MAE': 0,'SSIM':0}
+    averageError= {'MSE': 0, 'RMSE': 0, 'MAE': 0, 'SSIM': 0, 'R2': 0}
     averageError['MSE'] = errorSum['MSE'] / N
     averageError['SSIM'] = errorSum['SSIM'] / N
     averageError['MAE'] = errorSum['MAE'] / N
-
+    averageError['R2'] = errorSum['R2'] / N
 
     return averageError
 
