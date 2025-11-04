@@ -169,7 +169,11 @@ class HeightRegressionMetrics(object):
         gt_files = []
         with open(csv_file, 'r') as f:
             for line in f:
-                parts = line.strip().split(',')
+                # Handle both comma and semicolon delimiters
+                if ';' in line:
+                    parts = line.strip().split(';')
+                else:
+                    parts = line.strip().split(',')
                 if len(parts) >= 2:
                     rgb_path = parts[0]
                     dsm_path = parts[1]
